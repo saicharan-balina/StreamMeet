@@ -19,7 +19,7 @@ StreamMeet is a video conferencing web application that allows users to create a
 * Express.js
 * Socket.IO
 * WebRTC
-* MongoDB
+* MongoDB 
 
 ## Getting Started
 
@@ -27,7 +27,7 @@ StreamMeet is a video conferencing web application that allows users to create a
 
 ```bash
 git clone https://github.com/yourusername/streammeet.git
-cd streammeet
+cd  streammeet
 ```
 
 ### Install dependencies
