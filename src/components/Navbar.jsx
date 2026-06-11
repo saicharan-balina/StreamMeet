@@ -34,12 +34,12 @@ export default function Navbar() {
         </ul>
 
         <div className="hidden items-center gap-3 md:flex">
-          <button
-            type="button"
+          <a
+            href="#join"
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
           >
             Join Meeting
-          </button>
+          </a>
           <button
             type="button"
             className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700"
@@ -72,12 +72,12 @@ export default function Navbar() {
               </a>
             ))}
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+              <a
+                href="#join"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-center text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
               >
                 Join Meeting
-              </button>
+              </a>
               <button
                 type="button"
                 className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-700"

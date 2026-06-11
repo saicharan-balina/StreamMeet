@@ -30,13 +30,13 @@ export default function Hero() {
               Create Meeting
               <FiArrowRight className="h-4 w-4" />
             </button>
-            <button
-              type="button"
+            <a
+              href="#join"
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
             >
               <FiPlayCircle className="h-4 w-4" />
               Join Meeting
-            </button>
+            </a>
           </div>
         </div>
 
