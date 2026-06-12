@@ -1,7 +1,16 @@
+import { useState } from "react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 
 export default function JoinMeeting() {
+  const [roomId, setRoomId] = useState("");
+  const [displayName, setDisplayName] = useState("");
+
+  const handleJoinMeeting = () => {
+    if (roomId.trim() && displayName.trim()) {
+      window.location.hash = `#meeting?room=${encodeURIComponent(roomId)}&name=${encodeURIComponent(displayName)}`;
+    }
+  };
   return (
     <main className="min-h-screen bg-white text-slate-900">
       <Navbar />
@@ -30,6 +39,8 @@ export default function JoinMeeting() {
               <input
                 id="roomId"
                 type="text"
+                value={roomId}
+                onChange={(e) => setRoomId(e.target.value)}
                 placeholder="Enter room code"
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
               />
@@ -40,6 +51,8 @@ export default function JoinMeeting() {
               <input
                 id="displayName"
                 type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="Your name"
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
               />
@@ -47,7 +60,9 @@ export default function JoinMeeting() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
-                  className="rounded-xl bg-sky-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-700"
+                  onClick={handleJoinMeeting}
+                  disabled={!roomId.trim() || !displayName.trim()}
+                  className="rounded-xl bg-sky-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Join Meeting
                 </button>
