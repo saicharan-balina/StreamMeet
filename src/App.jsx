@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Home from "./pages/Home";
 import JoinMeeting from "./pages/JoinMeeting";
 import Meeting from "./pages/Meeting";
+import { NotificationProvider } from "./components/NotificationProvider";
 
 function getPageFromHash() {
   const hash = window.location.hash.substring(1).split("?")[0];
@@ -21,12 +22,24 @@ export default function App() {
   }, []);
 
   if (page === "join") {
-    return <JoinMeeting />;
+    return (
+      <NotificationProvider>
+        <JoinMeeting />
+      </NotificationProvider>
+    );
   }
 
   if (page === "meeting") {
-    return <Meeting />;
+    return (
+      <NotificationProvider>
+        <Meeting />
+      </NotificationProvider>
+    );
   }
 
-  return <Home />;
+  return (
+    <NotificationProvider>
+      <Home />
+    </NotificationProvider>
+  );
 }
