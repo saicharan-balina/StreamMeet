@@ -40,12 +40,12 @@ export default function Navbar() {
           >
             Join Meeting
           </a>
-          <button
-            type="button"
+          <a
+            href="#schedule"
             className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700"
           >
-            Create Meeting
-          </button>
+            Schedule Meeting
+          </a>
         </div>
 
         <button
@@ -78,12 +78,12 @@ export default function Navbar() {
               >
                 Join Meeting
               </a>
-              <button
-                type="button"
+              <a
+                href="#schedule"
                 className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-700"
               >
-                Create Meeting
-              </button>
+                Schedule Meeting
+              </a>
             </div>
           </div>
         </div>

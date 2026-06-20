@@ -12,9 +12,12 @@ export default function CTA() {
           </p>
           <button
             type="button"
+            onClick={() => {
+              window.location.hash = "#schedule";
+            }}
             className="mt-8 inline-flex items-center gap-2 rounded-lg bg-white px-6 py-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-50"
           >
-            Create Room
+            Schedule Meeting
             <FiArrowRight className="h-4 w-4" />
           </button>
         </div>

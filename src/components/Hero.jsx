@@ -25,9 +25,12 @@ export default function Hero() {
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
+              onClick={() => {
+                window.location.hash = "#schedule";
+              }}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
             >
-              Create Meeting
+              Schedule Meeting
               <FiArrowRight className="h-4 w-4" />
             </button>
             <a
