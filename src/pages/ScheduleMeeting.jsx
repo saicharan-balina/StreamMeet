@@ -126,7 +126,7 @@ export default function ScheduleMeeting() {
 
                 <div>
                   <label className="text-sm font-semibold text-slate-700" htmlFor="time">
-                    Time
+                    Time (24-hour)
                   </label>
                   <input
                     id="time"
@@ -135,6 +135,7 @@ export default function ScheduleMeeting() {
                     value={time}
                     onChange={(e) => setTime(e.target.value)}
                     className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                    placeholder="14:30"
                   />
                 </div>
               </div>
