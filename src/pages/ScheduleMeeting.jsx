@@ -11,8 +11,6 @@ import {
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 
-const timeSlots = ["10:00 AM", "11:30 AM", "2:00 PM", "4:30 PM"];
-
 const modes = [
   {
     id: "quick",
@@ -130,19 +128,14 @@ export default function ScheduleMeeting() {
                   <label className="text-sm font-semibold text-slate-700" htmlFor="time">
                     Time
                   </label>
-                  <select
+                  <input
                     id="time"
+                    type="time"
+                    step="60"
                     value={time}
                     onChange={(e) => setTime(e.target.value)}
                     className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
-                  >
-                    <option value="">Choose a time</option>
-                    {timeSlots.map((slot) => (
-                      <option key={slot} value={slot}>
-                        {slot}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
               </div>
 
