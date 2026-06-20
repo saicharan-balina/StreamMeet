@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import Home from "./pages/Home";
 import JoinMeeting from "./pages/JoinMeeting";
+import ScheduleMeeting from "./pages/ScheduleMeeting";
 import Meeting from "./pages/Meeting";
 import { NotificationProvider } from "./components/NotificationProvider";
 
 function getPageFromHash() {
   const hash = window.location.hash.substring(1).split("?")[0];
+  if (hash === "schedule") return "schedule";
   if (hash === "join") return "join";
   if (hash.startsWith("meeting")) return "meeting";
   return "home";
@@ -25,6 +27,14 @@ export default function App() {
     return (
       <NotificationProvider>
         <JoinMeeting />
+      </NotificationProvider>
+    );
+  }
+
+  if (page === "schedule") {
+    return (
+      <NotificationProvider>
+        <ScheduleMeeting />
       </NotificationProvider>
     );
   }
