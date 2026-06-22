@@ -1,14 +1,57 @@
 import { useState } from "react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { joinMeetingRoom } from "../lib/meetingApi";
 
 export default function JoinMeeting() {
   const [roomId, setRoomId] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [error, setError] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
 
-  const handleJoinMeeting = () => {
-    if (roomId.trim() && displayName.trim()) {
-      window.location.hash = `#meeting?room=${encodeURIComponent(roomId)}&name=${encodeURIComponent(displayName)}`;
+  const extractRoomId = (value) => {
+    const trimmedValue = value.trim();
+
+    if (!trimmedValue) {
+      return "";
+    }
+
+    const roomMatch = trimmedValue.match(/(?:[?&#]room=)([^&]+)/i);
+    if (roomMatch) {
+      return decodeURIComponent(roomMatch[1]);
+    }
+
+    if (trimmedValue.startsWith("http")) {
+      try {
+        const url = new URL(trimmedValue);
+        return url.searchParams.get("room") || url.pathname.split("/").filter(Boolean).at(-1) || trimmedValue;
+      } catch {
+        return trimmedValue;
+      }
+    }
+
+    return trimmedValue;
+  };
+
+  const handleJoinMeeting = async () => {
+    const normalizedRoomId = extractRoomId(roomId);
+
+    if (!normalizedRoomId || !displayName.trim()) {
+      setError("Enter both a room ID and display name.");
+      return;
+    }
+
+    setIsJoining(true);
+    setError("");
+
+    try {
+      const { room } = await joinMeetingRoom(normalizedRoomId, displayName);
+      window.location.hash = `#meeting?room=${encodeURIComponent(room.roomId)}&name=${encodeURIComponent(displayName.trim())}`;
+      return room;
+    } catch (joinError) {
+      setError(joinError.message || "Unable to join the room.");
+    } finally {
+      setIsJoining(false);
     }
   };
   return (
@@ -40,7 +83,10 @@ export default function JoinMeeting() {
                 id="roomId"
                 type="text"
                 value={roomId}
-                onChange={(e) => setRoomId(e.target.value)}
+                onChange={(e) => {
+                  setRoomId(e.target.value);
+                  setError("");
+                }}
                 placeholder="Enter room code"
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
               />
@@ -52,19 +98,24 @@ export default function JoinMeeting() {
                 id="displayName"
                 type="text"
                 value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
+                onChange={(e) => {
+                  setDisplayName(e.target.value);
+                  setError("");
+                }}
                 placeholder="Your name"
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
               />
+
+              {error && <p className="text-sm font-medium text-red-600">{error}</p>}
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={handleJoinMeeting}
-                  disabled={!roomId.trim() || !displayName.trim()}
+                  disabled={isJoining || !roomId.trim() || !displayName.trim()}
                   className="rounded-xl bg-sky-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Join Meeting
+                  {isJoining ? "Joining..." : "Join Meeting"}
                 </button>
                 <a
                   href="#home"
