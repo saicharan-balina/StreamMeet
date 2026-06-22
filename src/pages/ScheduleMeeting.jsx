@@ -10,6 +10,7 @@ import {
 } from "react-icons/fi";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { createMeetingRoom, getRoomApiBaseUrl } from "../lib/meetingApi";
 
 const modes = [
   {
@@ -35,15 +36,35 @@ export default function ScheduleMeeting() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [mode, setMode] = useState("quick");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [roomPreview, setRoomPreview] = useState("Waiting for creation");
 
-  const roomCode = "SM-204";
-
-  const handleSchedule = () => {
+  const handleSchedule = async () => {
     if (!meetingTitle.trim() || !hostName.trim() || !date || !time) {
+      setError("Fill in the title, host, date, and time before creating a room.");
       return;
     }
 
-    window.location.hash = `#meeting?room=${encodeURIComponent(roomCode)}&name=${encodeURIComponent(hostName)}`;
+    setIsSubmitting(true);
+    setError("");
+
+    try {
+      const { room } = await createMeetingRoom({
+        title: meetingTitle,
+        hostName,
+        date,
+        time,
+        mode,
+      });
+
+      setRoomPreview(room.roomId);
+      window.location.hash = `#meeting?room=${encodeURIComponent(room.roomId)}&name=${encodeURIComponent(hostName.trim())}`;
+    } catch (scheduleError) {
+      setError(scheduleError.message || "Unable to create the meeting room.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -144,10 +165,10 @@ export default function ScheduleMeeting() {
                 <button
                   type="button"
                   onClick={handleSchedule}
-                  disabled={!meetingTitle.trim() || !hostName.trim() || !date || !time}
+                  disabled={isSubmitting || !meetingTitle.trim() || !hostName.trim() || !date || !time}
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Schedule Meeting
+                  {isSubmitting ? "Creating..." : "Schedule Meeting"}
                   <FiArrowRight className="h-4 w-4" />
                 </button>
                 <a
@@ -164,8 +185,12 @@ export default function ScheduleMeeting() {
             <div className="rounded-2xl bg-slate-900 p-5 text-slate-100">
               <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-300">
                 <span>Schedule preview</span>
-                <span>{roomCode}</span>
+                <span>{roomPreview}</span>
               </div>
+
+              <p className="mt-4 text-sm text-slate-300">
+                Backend: {getRoomApiBaseUrl()}
+              </p>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl bg-sky-500/80 p-4">
@@ -192,6 +217,12 @@ export default function ScheduleMeeting() {
             </div>
 
             <div className="grid gap-3">
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+
               <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
                 <div className="mt-0.5 rounded-lg bg-sky-100 p-2 text-sky-700">
                   <FiCalendar className="h-4 w-4" />
