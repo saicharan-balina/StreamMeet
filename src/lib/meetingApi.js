@@ -36,6 +36,13 @@ export async function joinMeetingRoom(roomId, displayName) {
   });
 }
 
+export async function leaveMeetingRoom(roomId, displayName) {
+  return requestJson(`/api/rooms/${encodeURIComponent(roomId)}/leave`, {
+    method: "POST",
+    body: JSON.stringify({ displayName }),
+  });
+}
+
 export async function fetchMeetingRoom(roomId) {
   return requestJson(`/api/rooms/${encodeURIComponent(roomId)}`);
 }

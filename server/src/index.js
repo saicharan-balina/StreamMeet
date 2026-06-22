@@ -1,6 +1,6 @@
 import cors from "cors";
 import express from "express";
-import { createRoom, getRoom, joinRoom } from "./store.js";
+import { createRoom, getRoom, joinRoom, leaveRoom } from "./store.js";
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
@@ -55,6 +55,26 @@ app.post("/api/rooms/:roomId/join", (request, response, next) => {
     }
 
     const room = joinRoom(request.params.roomId, displayName);
+    return response.json({ room });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/api/rooms/:roomId/leave", (request, response, next) => {
+  try {
+    const { displayName } = request.body ?? {};
+
+    if (!displayName) {
+      return response.status(400).json({ error: "displayName is required" });
+    }
+
+    const room = leaveRoom(request.params.roomId, displayName);
+
+    if (!room) {
+      return response.status(204).end();
+    }
+
     return response.json({ room });
   } catch (error) {
     return next(error);

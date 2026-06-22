@@ -80,6 +80,30 @@ export function joinRoom(roomId, displayName) {
   return buildPublicRoom(room);
 }
 
+export function leaveRoom(roomId, displayName) {
+  const room = rooms.get(roomId);
+
+  if (!room) {
+    const error = new Error("Room not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const participantName = normalizeName(displayName).toLowerCase();
+  const nextParticipants = room.participants.filter(
+    (participant) => participant.name.toLowerCase() !== participantName,
+  );
+
+  room.participants = nextParticipants;
+
+  if (room.participants.length === 0) {
+    rooms.delete(roomId);
+    return null;
+  }
+
+  return buildPublicRoom(room);
+}
+
 export function getRoom(roomId) {
   const room = rooms.get(roomId);
 

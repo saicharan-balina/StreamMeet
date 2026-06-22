@@ -11,7 +11,7 @@ import {
 } from "react-icons/md";
 import { useNotification } from "../components/NotificationProvider";
 import Navbar from "../components/Navbar";
-import { fetchMeetingRoom } from "../lib/meetingApi";
+import { fetchMeetingRoom, leaveMeetingRoom } from "../lib/meetingApi";
 
 export default function Meeting() {
   const { addNotification } = useNotification();
@@ -72,6 +72,25 @@ export default function Meeting() {
     };
   }, [roomId]);
 
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!roomId || !displayName) {
+        return;
+      }
+
+      const payload = JSON.stringify({ displayName });
+      navigator.sendBeacon?.(
+        `${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/rooms/${encodeURIComponent(roomId)}/leave`,
+        new Blob([payload], { type: "application/json" }),
+      );
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [displayName, roomId]);
+
   const participants = room?.participants ?? [];
   const activeParticipants = participants.filter(
     (participant) => participant.role === "host" || participant.role === "guest",
@@ -117,10 +136,14 @@ export default function Meeting() {
 
   const endCall = () => {
     if (confirm("Are you sure you want to end the call?")) {
-      addNotification("Call ended", "info", 2000);
-      setTimeout(() => {
-        window.location.hash = "#";
-      }, 500);
+      leaveMeetingRoom(roomId, displayName)
+        .catch(() => {})
+        .finally(() => {
+          addNotification("Call ended", "info", 2000);
+          setTimeout(() => {
+            window.location.hash = "#";
+          }, 500);
+        });
     }
   };
 
