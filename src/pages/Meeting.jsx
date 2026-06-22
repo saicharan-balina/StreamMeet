@@ -11,6 +11,7 @@ import {
 } from "react-icons/md";
 import { useNotification } from "../components/NotificationProvider";
 import Navbar from "../components/Navbar";
+import { fetchMeetingRoom } from "../lib/meetingApi";
 
 export default function Meeting() {
   const { addNotification } = useNotification();
@@ -18,12 +19,14 @@ export default function Meeting() {
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
-  const [participants, setParticipants] = useState([
-    { id: 1, name: "You", isActive: true },
-    { id: 2, name: "John Doe", isActive: true },
-    { id: 3, name: "Jane Smith", isActive: false },
-  ]);
+  const [room, setRoom] = useState(null);
+  const [isLoadingRoom, setIsLoadingRoom] = useState(true);
+  const [roomError, setRoomError] = useState("");
   const videoRef = useRef(null);
+
+  const query = new URLSearchParams(window.location.hash.split("?")[1] || "");
+  const roomId = query.get("room") || "";
+  const displayName = query.get("name") || "You";
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -31,6 +34,48 @@ export default function Meeting() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!roomId) {
+      setRoomError("Missing room id in the meeting link.");
+      setIsLoadingRoom(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadRoom = async () => {
+      setIsLoadingRoom(true);
+      setRoomError("");
+
+      try {
+        const { room: fetchedRoom } = await fetchMeetingRoom(roomId);
+
+        if (isMounted) {
+          setRoom(fetchedRoom);
+        }
+      } catch (fetchError) {
+        if (isMounted) {
+          setRoomError(fetchError.message || "Unable to load the room.");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingRoom(false);
+        }
+      }
+    };
+
+    loadRoom();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [roomId]);
+
+  const participants = room?.participants ?? [];
+  const activeParticipants = participants.filter(
+    (participant) => participant.role === "host" || participant.role === "guest",
+  );
 
   const toggleMic = () => {
     setIsMicOn(!isMicOn);
@@ -87,6 +132,18 @@ export default function Meeting() {
       <div className="flex-1 flex gap-6 p-6 overflow-hidden">
         {/* Main Video Area */}
         <div className="flex-1 flex flex-col">
+          <div className="mb-4 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-700 shadow-sm backdrop-blur-sm">
+            {isLoadingRoom ? (
+              <span>Loading room {roomId}...</span>
+            ) : roomError ? (
+              <span className="text-red-600">{roomError}</span>
+            ) : (
+              <span>
+                {room?.title || "Meeting room"} · Room {room?.roomId} · Hosted by {room?.hostName}
+              </span>
+            )}
+          </div>
+
           {/* Primary Video */}
           <div className="flex-1 relative bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl overflow-hidden group shadow-lg border border-slate-200">
             <div className="w-full h-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
@@ -106,7 +163,7 @@ export default function Meeting() {
             <div className="absolute bottom-4 left-4 flex items-center gap-2">
               <div className={`w-3 h-3 rounded-full ${isMicOn ? "bg-emerald-500" : "bg-red-500"}`} />
               <span className="text-sm font-semibold bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-slate-900 border border-slate-200">
-                You
+                {displayName}
               </span>
             </div>
 
@@ -119,9 +176,9 @@ export default function Meeting() {
           </div>
 
           {/* Participants Grid */}
-          {participants.length > 1 && (
+          {activeParticipants.length > 1 && (
             <div className="mt-4 grid grid-cols-3 gap-3 max-h-[180px]">
-              {participants.slice(1).map((participant) => (
+              {activeParticipants.slice(1).map((participant) => (
                 <div
                   key={participant.id}
                   className="relative bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl overflow-hidden aspect-video group shadow-md border border-slate-200 hover:shadow-lg transition"
@@ -139,7 +196,7 @@ export default function Meeting() {
 
                   {/* Status Indicator */}
                   <div className="absolute top-2 right-2">
-                    <div className={`w-2 h-2 rounded-full ${participant.isActive ? "bg-emerald-500" : "bg-slate-400"}`} />
+                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
                   </div>
                 </div>
               ))}
@@ -150,32 +207,43 @@ export default function Meeting() {
         {/* Sidebar - Participants List */}
         <div className="w-72 bg-white/70 backdrop-blur-sm rounded-2xl overflow-hidden flex flex-col shadow-lg border border-slate-200">
           <div className="p-4 border-b border-slate-200">
-            <h2 className="text-lg font-semibold text-slate-900">Participants ({participants.length})</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Participants ({activeParticipants.length || 1})</h2>
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {participants.map((participant) => (
-              <div
-                key={participant.id}
-                className="flex items-center gap-3 p-4 border-b border-slate-100 hover:bg-sky-50/50 transition"
-              >
-                <div className="w-10 h-10 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0">
-                  <MdPerson className="text-sky-600" />
+            {activeParticipants.length > 0 ? (
+              activeParticipants.map((participant) => (
+                <div
+                  key={participant.id}
+                  className="flex items-center gap-3 p-4 border-b border-slate-100 hover:bg-sky-50/50 transition"
+                >
+                  <div className="w-10 h-10 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0">
+                    <MdPerson className="text-sky-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-900 truncate">{participant.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {participant.role === "host" ? "Host" : "Guest"}
+                    </p>
+                  </div>
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900 truncate">{participant.name}</p>
-                  <p className="text-xs text-slate-500">
-                    {participant.isActive ? "Active" : "Idle"}
-                  </p>
-                </div>
-                <div className={`w-2 h-2 rounded-full ${participant.isActive ? "bg-emerald-500" : "bg-slate-400"}`} />
-              </div>
-            ))}
+              ))
+            ) : (
+              <div className="p-4 text-sm text-slate-500">No participants loaded yet.</div>
+            )}
           </div>
 
           {/* Participants Actions */}
           <div className="p-4 border-t border-slate-200">
-            <button className="w-full text-sm font-semibold text-sky-600 hover:text-sky-700 transition py-2 px-3 rounded-lg hover:bg-sky-50">
+            <button
+              type="button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(window.location.href);
+                addNotification("Invite link copied", "success", 2000);
+              }}
+              className="w-full text-sm font-semibold text-sky-600 hover:text-sky-700 transition py-2 px-3 rounded-lg hover:bg-sky-50"
+            >
               Share Invite Link
             </button>
           </div>
