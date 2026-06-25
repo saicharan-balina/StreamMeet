@@ -61,9 +61,13 @@ The application now uses a basic Express backend to create and join rooms, fetch
 
 ## Basic Backend API
 
+* `GET /api/health` checks backend status.
 * `POST /api/rooms` creates a room.
 * `GET /api/rooms/:roomId` fetches room details.
 * `POST /api/rooms/:roomId/join` adds a participant to a room.
+* `POST /api/rooms/:roomId/leave` removes a participant from a room.
+
+The room API validates required fields, normalizes room codes and participant names, and keeps participant state in memory for the current server process.
 
 ## Future Improvements
 
