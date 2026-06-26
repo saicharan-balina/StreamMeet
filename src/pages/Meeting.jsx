@@ -7,6 +7,8 @@ import {
   MdScreenShare,
   MdStopScreenShare,
   MdCallEnd,
+  MdChat,
+  MdSend,
   MdPerson,
 } from "react-icons/md";
 import { useNotification } from "../components/NotificationProvider";
@@ -15,6 +17,9 @@ import { fetchMeetingRoom, leaveMeetingRoom } from "../lib/meetingApi";
 
 export default function Meeting() {
   const { addNotification } = useNotification();
+  const query = new URLSearchParams(window.location.hash.split("?")[1] || "");
+  const roomId = query.get("room") || "";
+  const displayName = query.get("name") || "You";
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -22,11 +27,18 @@ export default function Meeting() {
   const [room, setRoom] = useState(null);
   const [isLoadingRoom, setIsLoadingRoom] = useState(true);
   const [roomError, setRoomError] = useState("");
+  const [chatInput, setChatInput] = useState("");
+  const [chatMessages, setChatMessages] = useState([
+    {
+      id: "welcome",
+      sender: "StreamMeet",
+      role: "system",
+      message: "Chat is ready for meeting notes, quick links, and questions.",
+      sentAt: "Now",
+    },
+  ]);
   const videoRef = useRef(null);
-
-  const query = new URLSearchParams(window.location.hash.split("?")[1] || "");
-  const roomId = query.get("room") || "";
-  const displayName = query.get("name") || "You";
+  const chatEndRef = useRef(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -91,6 +103,10 @@ export default function Meeting() {
     };
   }, [displayName, roomId]);
 
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
+
   const participants = room?.participants ?? [];
   const activeParticipants = participants.filter(
     (participant) => participant.role === "host" || participant.role === "guest",
@@ -145,6 +161,32 @@ export default function Meeting() {
           }, 500);
         });
     }
+  };
+
+  const sendChatMessage = (event) => {
+    event.preventDefault();
+
+    const trimmedMessage = chatInput.trim();
+    if (!trimmedMessage) {
+      return;
+    }
+
+    const sentAt = new Intl.DateTimeFormat("en", {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date());
+
+    setChatMessages((messages) => [
+      ...messages,
+      {
+        id: `${Date.now()}-${trimmedMessage}`,
+        sender: displayName,
+        role: "guest",
+        message: trimmedMessage,
+        sentAt,
+      },
+    ]);
+    setChatInput("");
   };
 
   return (
@@ -271,6 +313,86 @@ export default function Meeting() {
             </button>
           </div>
         </div>
+
+        {/* Meeting Chat */}
+        <section className="w-80 bg-white/80 backdrop-blur-sm rounded-2xl overflow-hidden flex flex-col shadow-lg border border-slate-200">
+          <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                <MdChat className="text-xl" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Meeting Chat</h2>
+                <p className="text-xs text-slate-500">{chatMessages.length} messages</p>
+              </div>
+            </div>
+            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+              Live
+            </span>
+          </div>
+
+          <div className="flex-1 space-y-3 overflow-y-auto p-4">
+            {chatMessages.map((chatMessage) => {
+              const isOwnMessage = chatMessage.sender === displayName;
+
+              return (
+                <div
+                  key={chatMessage.id}
+                  className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[86%] rounded-2xl px-3 py-2 shadow-sm ${
+                      isOwnMessage
+                        ? "bg-sky-600 text-white"
+                        : chatMessage.role === "system"
+                          ? "bg-emerald-50 text-emerald-900 border border-emerald-100"
+                          : "bg-slate-100 text-slate-900"
+                    }`}
+                  >
+                    <div className="mb-1 flex items-center justify-between gap-3">
+                      <span
+                        className={`text-xs font-semibold ${
+                          isOwnMessage ? "text-sky-50" : "text-slate-600"
+                        }`}
+                      >
+                        {chatMessage.sender}
+                      </span>
+                      <span
+                        className={`text-[11px] ${
+                          isOwnMessage ? "text-sky-100" : "text-slate-400"
+                        }`}
+                      >
+                        {chatMessage.sentAt}
+                      </span>
+                    </div>
+                    <p className="text-sm leading-relaxed">{chatMessage.message}</p>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={chatEndRef} />
+          </div>
+
+          <form onSubmit={sendChatMessage} className="border-t border-slate-200 p-4">
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm focus-within:border-sky-300 focus-within:ring-2 focus-within:ring-sky-100">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(event) => setChatInput(event.target.value)}
+                placeholder="Message everyone"
+                className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+              />
+              <button
+                type="submit"
+                disabled={!chatInput.trim()}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-600 text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                title="Send message"
+              >
+                <MdSend className="text-lg" />
+              </button>
+            </div>
+          </form>
+        </section>
       </div>
 
       {/* Control Bar */}
