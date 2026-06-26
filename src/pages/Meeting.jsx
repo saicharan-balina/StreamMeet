@@ -190,13 +190,13 @@ export default function Meeting() {
   };
 
   return (
-    <main className="h-screen bg-gradient-to-br from-sky-50 via-white to-emerald-50 text-slate-900 overflow-hidden flex flex-col">
+    <main className="flex min-h-screen flex-col bg-gradient-to-br from-sky-50 via-white to-emerald-50 text-slate-900 lg:h-screen lg:overflow-hidden">
       <Navbar />
 
       {/* Video Grid */}
-      <div className="flex-1 flex gap-6 p-6 overflow-hidden">
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6 xl:flex-row xl:overflow-hidden">
         {/* Main Video Area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex min-h-[520px] flex-1 flex-col xl:min-h-0">
           <div className="mb-4 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-700 shadow-sm backdrop-blur-sm">
             {isLoadingRoom ? (
               <span>Loading room {roomId}...</span>
@@ -204,7 +204,7 @@ export default function Meeting() {
               <span className="text-red-600">{roomError}</span>
             ) : (
               <span>
-                {room?.title || "Meeting room"} · Room {room?.roomId} · Hosted by {room?.hostName}
+                {room?.title || "Meeting room"} | Room {room?.roomId} | Hosted by {room?.hostName}
               </span>
             )}
           </div>
@@ -225,7 +225,7 @@ export default function Meeting() {
             </div>
 
             {/* Participant Name Overlay */}
-            <div className="absolute bottom-4 left-4 flex items-center gap-2">
+            <div className="absolute bottom-4 left-4 flex max-w-[calc(100%-2rem)] items-center gap-2">
               <div className={`w-3 h-3 rounded-full ${isMicOn ? "bg-emerald-500" : "bg-red-500"}`} />
               <span className="text-sm font-semibold bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-slate-900 border border-slate-200">
                 {displayName}
@@ -242,7 +242,7 @@ export default function Meeting() {
 
           {/* Participants Grid */}
           {activeParticipants.length > 1 && (
-            <div className="mt-4 grid grid-cols-3 gap-3 max-h-[180px]">
+            <div className="mt-4 grid max-h-[220px] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
               {activeParticipants.slice(1).map((participant) => (
                 <div
                   key={participant.id}
@@ -269,8 +269,9 @@ export default function Meeting() {
           )}
         </div>
 
+        <aside className="flex w-full flex-col gap-4 xl:w-[360px] xl:flex-shrink-0 xl:overflow-hidden">
         {/* Sidebar - Participants List */}
-        <div className="w-72 bg-white/70 backdrop-blur-sm rounded-2xl overflow-hidden flex flex-col shadow-lg border border-slate-200">
+        <section className="flex max-h-[320px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/70 shadow-lg backdrop-blur-sm xl:max-h-[36%]">
           <div className="p-4 border-b border-slate-200">
             <h2 className="text-lg font-semibold text-slate-900">Participants ({activeParticipants.length || 1})</h2>
           </div>
@@ -312,10 +313,10 @@ export default function Meeting() {
               Share Invite Link
             </button>
           </div>
-        </div>
+        </section>
 
         {/* Meeting Chat */}
-        <section className="w-80 bg-white/80 backdrop-blur-sm rounded-2xl overflow-hidden flex flex-col shadow-lg border border-slate-200">
+        <section className="flex min-h-[420px] flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/80 shadow-lg backdrop-blur-sm xl:min-h-0">
           <div className="p-4 border-b border-slate-200 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
@@ -393,6 +394,7 @@ export default function Meeting() {
             </div>
           </form>
         </section>
+        </aside>
       </div>
 
       {/* Control Bar */}
