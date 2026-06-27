@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 const rooms = new Map();
 const DEFAULT_MAX_PARTICIPANTS = 12;
 const VALID_ROOM_MODES = new Set(["quick", "private", "recurring"]);
+const WELCOME_MESSAGE = "Chat is ready for meeting notes, quick links, and questions.";
 
 function makeRoomId() {
   return `SM-${randomUUID().slice(0, 8).toUpperCase()}`;
@@ -24,6 +25,38 @@ function normalizeMode(mode) {
   return VALID_ROOM_MODES.has(mode) ? mode : "quick";
 }
 
+function buildPublicMessage(message) {
+  return {
+    id: message.id,
+    sender: message.sender,
+    role: message.role,
+    message: message.message,
+    createdAt: message.createdAt,
+  };
+}
+
+function createSystemMessage(message) {
+  const createdAt = new Date().toISOString();
+  return {
+    id: randomUUID(),
+    sender: "StreamMeet",
+    role: "system",
+    message,
+    createdAt,
+  };
+}
+
+function createChatMessage({ sender, role, message }) {
+  const createdAt = new Date().toISOString();
+  return {
+    id: randomUUID(),
+    sender: normalizeName(sender),
+    role: role === "system" ? "system" : "guest",
+    message: normalizeText(message),
+    createdAt,
+  };
+}
+
 function buildPublicRoom(room) {
   return {
     roomId: room.roomId,
@@ -35,6 +68,7 @@ function buildPublicRoom(room) {
     createdAt: room.createdAt,
     updatedAt: room.updatedAt,
     maxParticipants: room.maxParticipants,
+    messageCount: room.chatMessages.length,
     participants: room.participants.map((participant) => ({ ...participant })),
   };
 }
@@ -68,6 +102,7 @@ export function createRoom({ title, hostName, date, time, mode, maxParticipants 
         joinedAt: createdAt,
       },
     ],
+    chatMessages: [createSystemMessage(WELCOME_MESSAGE)],
   };
 
   rooms.set(roomId, room);
@@ -113,6 +148,7 @@ export function joinRoom(roomId, displayName) {
     joinedAt,
     lastSeenAt: joinedAt,
   });
+  room.chatMessages.push(createSystemMessage(`${participantName} joined the meeting.`));
   room.updatedAt = joinedAt;
 
   return buildPublicRoom(room);
@@ -132,6 +168,10 @@ export function leaveRoom(roomId, displayName) {
   );
 
   room.participants = nextParticipants;
+
+  if (participantName) {
+    room.chatMessages.push(createSystemMessage(`${normalizeName(displayName)} left the meeting.`));
+  }
 
   if (room.participants.length === 0) {
     rooms.delete(normalizedRoomId);
@@ -154,4 +194,49 @@ export function getRoom(roomId) {
 
 export function getRoomCount() {
   return rooms.size;
+}
+
+export function getRoomMessages(roomId) {
+  const room = rooms.get(normalizeRoomId(roomId));
+
+  if (!room) {
+    return null;
+  }
+
+  return room.chatMessages.map((message) => buildPublicMessage(message));
+}
+
+export function addRoomMessage(roomId, { sender, message, role }) {
+  const normalizedRoomId = normalizeRoomId(roomId);
+  const room = rooms.get(normalizedRoomId);
+
+  if (!room) {
+    throw createNotFoundError();
+  }
+
+  const normalizedSender = normalizeName(sender);
+  const normalizedMessage = normalizeText(message);
+
+  if (!normalizedSender) {
+    const error = new Error("sender is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!normalizedMessage) {
+    const error = new Error("message is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const nextMessage = createChatMessage({
+    sender: normalizedSender,
+    role,
+    message: normalizedMessage,
+  });
+
+  room.chatMessages.push(nextMessage);
+  room.updatedAt = nextMessage.createdAt;
+
+  return buildPublicMessage(nextMessage);
 }

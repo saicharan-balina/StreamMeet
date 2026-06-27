@@ -1,11 +1,20 @@
 import cors from "cors";
 import express from "express";
-import { createRoom, getRoom, getRoomCount, joinRoom, leaveRoom } from "./store.js";
+import {
+  addRoomMessage,
+  createRoom,
+  getRoom,
+  getRoomCount,
+  getRoomMessages,
+  joinRoom,
+  leaveRoom,
+} from "./store.js";
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
 const allowedOrigin = process.env.FRONTEND_ORIGIN || "*";
 const validModes = new Set(["quick", "private", "recurring"]);
+const validMessageRoles = new Set(["guest", "host", "system"]);
 
 app.use(cors({ origin: allowedOrigin }));
 app.use(express.json({ limit: "32kb" }));
@@ -25,6 +34,38 @@ function isValidDate(value) {
 
 function isValidTime(value) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function validateChatMessageBody(body, response) {
+  const { sender, message, role } = body ?? {};
+  const normalizedSender = normalizeText(sender);
+  const normalizedMessage = normalizeText(message);
+
+  if (!normalizedSender || !normalizedMessage) {
+    sendValidationError(response, "sender and message are required");
+    return null;
+  }
+
+  if (normalizedSender.length > 60) {
+    sendValidationError(response, "sender must be 60 characters or fewer");
+    return null;
+  }
+
+  if (normalizedMessage.length > 500) {
+    sendValidationError(response, "message must be 500 characters or fewer");
+    return null;
+  }
+
+  if (role && !validMessageRoles.has(role)) {
+    sendValidationError(response, "role must be guest, host, or system");
+    return null;
+  }
+
+  return {
+    sender: normalizedSender,
+    message: normalizedMessage,
+    role: role || "guest",
+  };
 }
 
 function sendValidationError(response, message) {
@@ -94,6 +135,16 @@ app.get("/api/rooms/:roomId", (request, response) => {
   return response.json({ room });
 });
 
+app.get("/api/rooms/:roomId/messages", (request, response) => {
+  const messages = getRoomMessages(request.params.roomId);
+
+  if (!messages) {
+    return response.status(404).json({ error: "Room not found" });
+  }
+
+  return response.json({ messages });
+});
+
 app.post("/api/rooms/:roomId/join", (request, response, next) => {
   try {
     const { displayName } = request.body ?? {};
@@ -109,6 +160,21 @@ app.post("/api/rooms/:roomId/join", (request, response, next) => {
 
     const room = joinRoom(request.params.roomId, normalizedDisplayName);
     return response.json({ room });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/api/rooms/:roomId/messages", (request, response, next) => {
+  try {
+    const chatMessage = validateChatMessageBody(request.body, response);
+
+    if (!chatMessage) {
+      return null;
+    }
+
+    const message = addRoomMessage(request.params.roomId, chatMessage);
+    return response.status(201).json({ message });
   } catch (error) {
     return next(error);
   }
