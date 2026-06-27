@@ -13,7 +13,12 @@ import {
 } from "react-icons/md";
 import { useNotification } from "../components/NotificationProvider";
 import Navbar from "../components/Navbar";
-import { fetchMeetingRoom, leaveMeetingRoom } from "../lib/meetingApi";
+import {
+  fetchMeetingMessages,
+  fetchMeetingRoom,
+  leaveMeetingRoom,
+  sendMeetingMessage,
+} from "../lib/meetingApi";
 
 export default function Meeting() {
   const { addNotification } = useNotification();
@@ -28,15 +33,8 @@ export default function Meeting() {
   const [isLoadingRoom, setIsLoadingRoom] = useState(true);
   const [roomError, setRoomError] = useState("");
   const [chatInput, setChatInput] = useState("");
-  const [chatMessages, setChatMessages] = useState([
-    {
-      id: "welcome",
-      sender: "StreamMeet",
-      role: "system",
-      message: "Chat is ready for meeting notes, quick links, and questions.",
-      sentAt: "Now",
-    },
-  ]);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatError, setChatError] = useState("");
   const videoRef = useRef(null);
   const chatEndRef = useRef(null);
 
@@ -81,6 +79,37 @@ export default function Meeting() {
 
     return () => {
       isMounted = false;
+    };
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!roomId) {
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const loadMessages = async () => {
+      try {
+        const { messages } = await fetchMeetingMessages(roomId);
+
+        if (isMounted) {
+          setChatMessages(messages);
+          setChatError("");
+        }
+      } catch (fetchError) {
+        if (isMounted) {
+          setChatError(fetchError.message || "Unable to load chat messages.");
+        }
+      }
+    };
+
+    loadMessages();
+    const intervalId = window.setInterval(loadMessages, 4000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
     };
   }, [roomId]);
 
@@ -150,6 +179,21 @@ export default function Meeting() {
     return `${minutes}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const formatMessageTimestamp = (message) => {
+    if (message.sentAt) {
+      return message.sentAt;
+    }
+
+    if (!message.createdAt) {
+      return "Now";
+    }
+
+    return new Intl.DateTimeFormat("en", {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(message.createdAt));
+  };
+
   const endCall = () => {
     if (confirm("Are you sure you want to end the call?")) {
       leaveMeetingRoom(roomId, displayName)
@@ -166,27 +210,31 @@ export default function Meeting() {
   const sendChatMessage = (event) => {
     event.preventDefault();
 
+    if (!roomId || roomError) {
+      return;
+    }
+
     const trimmedMessage = chatInput.trim();
     if (!trimmedMessage) {
       return;
     }
 
-    const sentAt = new Intl.DateTimeFormat("en", {
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date());
+    sendMeetingMessage(roomId, displayName, trimmedMessage)
+      .then(({ message }) => {
+        setChatMessages((messages) => {
+          if (messages.some((existingMessage) => existingMessage.id === message.id)) {
+            return messages;
+          }
 
-    setChatMessages((messages) => [
-      ...messages,
-      {
-        id: `${Date.now()}-${trimmedMessage}`,
-        sender: displayName,
-        role: "guest",
-        message: trimmedMessage,
-        sentAt,
-      },
-    ]);
-    setChatInput("");
+          return [...messages, message];
+        });
+        setChatInput("");
+        setChatError("");
+      })
+      .catch((sendError) => {
+        setChatError(sendError.message || "Unable to send the message.");
+        addNotification("Message failed to send", "error", 2500);
+      });
   };
 
   return (
@@ -363,7 +411,7 @@ export default function Meeting() {
                           isOwnMessage ? "text-sky-100" : "text-slate-400"
                         }`}
                       >
-                        {chatMessage.sentAt}
+                        {formatMessageTimestamp(chatMessage)}
                       </span>
                     </div>
                     <p className="text-sm leading-relaxed">{chatMessage.message}</p>
@@ -374,6 +422,12 @@ export default function Meeting() {
             <div ref={chatEndRef} />
           </div>
 
+          {chatError && (
+            <div className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+              {chatError}
+            </div>
+          )}
+
           <form onSubmit={sendChatMessage} className="border-t border-slate-200 p-4">
             <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm focus-within:border-sky-300 focus-within:ring-2 focus-within:ring-sky-100">
               <input
@@ -381,11 +435,12 @@ export default function Meeting() {
                 value={chatInput}
                 onChange={(event) => setChatInput(event.target.value)}
                 placeholder="Message everyone"
+                disabled={!roomId || Boolean(roomError)}
                 className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
               />
               <button
                 type="submit"
-                disabled={!chatInput.trim()}
+                disabled={!chatInput.trim() || !roomId || Boolean(roomError)}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-600 text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
                 title="Send message"
               >

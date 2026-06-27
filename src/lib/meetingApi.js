@@ -46,3 +46,14 @@ export async function leaveMeetingRoom(roomId, displayName) {
 export async function fetchMeetingRoom(roomId) {
   return requestJson(`/api/rooms/${encodeURIComponent(roomId)}`);
 }
+
+export async function fetchMeetingMessages(roomId) {
+  return requestJson(`/api/rooms/${encodeURIComponent(roomId)}/messages`);
+}
+
+export async function sendMeetingMessage(roomId, sender, message, role = "guest") {
+  return requestJson(`/api/rooms/${encodeURIComponent(roomId)}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ sender, message, role }),
+  });
+}
