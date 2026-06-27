@@ -7,7 +7,7 @@ StreamMeet is a video conferencing web application that allows users to create a
 * Video calling
 * Audio calling
 * Screen sharing
-* Real-time chat
+* Room chat backed by the Express API
 * Create and join meeting rooms
 * Mute/unmute microphone
 * Turn camera on/off
@@ -57,17 +57,19 @@ npm run backend:dev
 
 ## Project Overview
 
-The application now uses a basic Express backend to create and join rooms, fetch room metadata, and keep the frontend meeting flow synchronized with the room state. Users can create meeting rooms and share room links with others to join video calls.
+The application now uses a basic Express backend to create and join rooms, fetch room metadata, and keep the frontend meeting flow synchronized with the room state. Users can create meeting rooms, share room links with others to join video calls, and exchange chat messages that are stored per room in memory while the server is running.
 
 ## Basic Backend API
 
 * `GET /api/health` checks backend status.
 * `POST /api/rooms` creates a room.
 * `GET /api/rooms/:roomId` fetches room details.
+* `GET /api/rooms/:roomId/messages` fetches the room chat history.
 * `POST /api/rooms/:roomId/join` adds a participant to a room.
+* `POST /api/rooms/:roomId/messages` adds a chat message to the room.
 * `POST /api/rooms/:roomId/leave` removes a participant from a room.
 
-The room API validates required fields, normalizes room codes and participant names, and keeps participant state in memory for the current server process.
+The room API validates required fields, normalizes room codes, participant names, and chat messages, and keeps participant and chat state in memory for the current server process.
 
 ## Future Improvements
 

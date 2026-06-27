@@ -17,6 +17,7 @@ StreamMeet follows a client-server architecture where users interact through a R
 - Basic room management API
 - Meeting metadata storage
 - In-memory participant state for the first working version
+- In-memory chat history for each room
 
 ### Signaling Server
 - Exchanges SDP offers and answers
@@ -52,7 +53,7 @@ Stores:
 - Meeting information
 - Room participants
 - Meeting history placeholder
-- Chat records placeholder
+- Chat records for the active room
 
 ## Security
 
