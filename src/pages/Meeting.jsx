@@ -15,11 +15,14 @@ import {
   MdVideocamOff,
 } from "react-icons/md";
 import { useNotification } from "../components/NotificationProvider";
+import { useLocalMedia } from "../hooks/useLocalMedia";
+import { usePeerMesh } from "../hooks/usePeerMesh";
 import {
   fetchMeetingMessages,
   fetchMeetingRoom,
   leaveMeetingRoom,
   sendMeetingMessage,
+  heartbeatMeetingRoom,
 } from "../lib/meetingApi";
 
 const POLL_INTERVAL = 1500;
@@ -29,8 +32,7 @@ export default function Meeting() {
   const query = useMemo(() => new URLSearchParams(window.location.hash.split("?")[1] || ""), []);
   const roomId = query.get("room") || "";
   const displayName = query.get("name") || "You";
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [isCameraOn, setIsCameraOn] = useState(true);
+  const clientId = query.get("client") || "";
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [duration, setDuration] = useState(0);
   const [room, setRoom] = useState(null);
@@ -38,16 +40,24 @@ export default function Meeting() {
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState([]);
   const [chatError, setChatError] = useState("");
-  const [mediaError, setMediaError] = useState("");
   const [activePanel, setActivePanel] = useState(null);
   const [isSending, setIsSending] = useState(false);
   const videoRef = useRef(null);
-  const cameraStreamRef = useRef(null);
   const screenStreamRef = useRef(null);
   const chatEndRef = useRef(null);
 
   const participants = room?.participants ?? [];
   const role = room?.hostName?.toLowerCase() === displayName.toLowerCase() ? "host" : "guest";
+  const localMedia = useLocalMedia();
+  const participantIds = useMemo(() => participants.map((participant) => participant.clientId), [participants]);
+  const { remoteStreams, connectionStates } = usePeerMesh({
+    roomId,
+    clientId,
+    participantIds,
+    localStream: localMedia.stream,
+  });
+  const isMicOn = localMedia.micOn;
+  const isCameraOn = localMedia.cameraOn;
 
   useEffect(() => {
     const timer = window.setInterval(() => setDuration((value) => value + 1), 1000);
@@ -111,35 +121,25 @@ export default function Meeting() {
   }, [roomId]);
 
   useEffect(() => {
-    let alive = true;
-    const startCamera = async () => {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setMediaError("Camera access is not supported in this browser.");
-        setIsCameraOn(false);
-        setIsMicOn(false);
-        return;
-      }
+    if (videoRef.current) videoRef.current.srcObject = localMedia.stream;
+  }, [localMedia.stream]);
+
+  useEffect(() => {
+    if (!roomId || !clientId) return undefined;
+    const beat = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        if (!alive) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        cameraStreamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      } catch {
-        setMediaError("Camera and microphone permission was not granted. You can still use meeting chat.");
-        setIsCameraOn(false);
-        setIsMicOn(false);
-      }
+        const result = await heartbeatMeetingRoom(roomId, clientId, {
+          mic: isMicOn,
+          camera: isCameraOn,
+          screen: isScreenSharing,
+        });
+        setRoom(result.room);
+      } catch { /* regular room polling displays connection errors */ }
     };
-    startCamera();
-    return () => {
-      alive = false;
-      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
-      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
-    };
-  }, []);
+    beat();
+    const timer = window.setInterval(beat, 5000);
+    return () => window.clearInterval(timer);
+  }, [clientId, isCameraOn, isMicOn, isScreenSharing, roomId]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -150,30 +150,21 @@ export default function Meeting() {
       if (!roomId) return;
       navigator.sendBeacon?.(
         `${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/rooms/${encodeURIComponent(roomId)}/leave`,
-        new Blob([JSON.stringify({ displayName })], { type: "application/json" }),
+        new Blob([JSON.stringify({ displayName, clientId })], { type: "application/json" }),
       );
     };
     window.addEventListener("beforeunload", leave);
     return () => window.removeEventListener("beforeunload", leave);
-  }, [displayName, roomId]);
+  }, [clientId, displayName, roomId]);
 
-  const toggleMic = () => {
-    const next = !isMicOn;
-    cameraStreamRef.current?.getAudioTracks().forEach((track) => { track.enabled = next; });
-    setIsMicOn(next);
-  };
-
-  const toggleCamera = () => {
-    const next = !isCameraOn;
-    cameraStreamRef.current?.getVideoTracks().forEach((track) => { track.enabled = next; });
-    setIsCameraOn(next);
-  };
+  const toggleMic = localMedia.toggleMic;
+  const toggleCamera = localMedia.toggleCamera;
 
   const toggleScreenShare = async () => {
     if (isScreenSharing) {
       screenStreamRef.current?.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
-      if (videoRef.current) videoRef.current.srcObject = cameraStreamRef.current;
+      if (videoRef.current) videoRef.current.srcObject = localMedia.stream;
       setIsScreenSharing(false);
       return;
     }
@@ -187,7 +178,7 @@ export default function Meeting() {
       if (videoRef.current) videoRef.current.srcObject = stream;
       setIsScreenSharing(true);
       stream.getVideoTracks()[0].addEventListener("ended", () => {
-        if (videoRef.current) videoRef.current.srcObject = cameraStreamRef.current;
+        if (videoRef.current) videoRef.current.srcObject = localMedia.stream;
         screenStreamRef.current = null;
         setIsScreenSharing(false);
       }, { once: true });
@@ -225,9 +216,9 @@ export default function Meeting() {
 
   const endCall = async () => {
     if (!window.confirm("Leave this meeting?")) return;
-    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localMedia.stop();
     screenStreamRef.current?.getTracks().forEach((track) => track.stop());
-    try { await leaveMeetingRoom(roomId, displayName); } catch { /* room may already be closed */ }
+    try { await leaveMeetingRoom(roomId, displayName, clientId); } catch { /* room may already be closed */ }
     window.location.hash = "#home";
   };
 
@@ -253,8 +244,9 @@ export default function Meeting() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <section className="relative flex min-w-0 flex-1 items-center justify-center p-3 sm:p-5">
-          <div className="relative h-full w-full overflow-hidden rounded-2xl border border-white/10 bg-[#1b1e25] shadow-2xl">
+        <section className="relative min-w-0 flex-1 overflow-y-auto p-3 sm:p-5">
+          <div className={`grid min-h-full gap-3 ${participants.length <= 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2"}`}>
+          <div className="relative min-h-[260px] overflow-hidden rounded-2xl border border-white/10 bg-[#1b1e25] shadow-2xl">
             <video ref={videoRef} autoPlay muted playsInline className={`h-full w-full object-cover ${isCameraOn || isScreenSharing ? "block" : "hidden"}`} />
             {!isCameraOn && !isScreenSharing && (
               <div className="flex h-full flex-col items-center justify-center bg-[radial-gradient(circle_at_center,#273242,#181b21_65%)]">
@@ -262,13 +254,22 @@ export default function Meeting() {
                   {displayName.trim().charAt(0).toUpperCase() || <MdPerson />}
                 </div>
                 <p className="mt-4 text-sm font-medium text-slate-200">Camera is off</p>
-                {mediaError && <p className="mt-2 max-w-md px-6 text-center text-xs text-slate-400">{mediaError}</p>}
+                {localMedia.error && <p className="mt-2 max-w-md px-6 text-center text-xs text-slate-400">{localMedia.error}</p>}
               </div>
             )}
             <div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-lg bg-black/65 px-3 py-2 text-sm backdrop-blur">
               {!isMicOn && <MdMicOff className="text-red-400" />} {displayName} {role === "host" && <span className="text-xs text-slate-400">(Host)</span>}
             </div>
             {isScreenSharing && <div className="absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold">You are presenting</div>}
+          </div>
+          {participants.filter((participant) => participant.clientId !== clientId).map((participant) => (
+            <RemoteVideoTile
+              key={participant.clientId}
+              participant={participant}
+              stream={remoteStreams[participant.clientId]}
+              connectionState={connectionStates[participant.clientId]}
+            />
+          ))}
           </div>
         </section>
 
@@ -343,6 +344,28 @@ export default function Meeting() {
         </div>
       </footer>
     </main>
+  );
+}
+
+function RemoteVideoTile({ participant, stream, connectionState }) {
+  const remoteVideoRef = useRef(null);
+  useEffect(() => {
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = stream || null;
+  }, [stream]);
+  const hasVideo = Boolean(stream?.getVideoTracks().some((track) => track.readyState === "live")) && participant.media?.camera !== false;
+  return (
+    <div className="relative min-h-[260px] overflow-hidden rounded-2xl border border-white/10 bg-[#1b1e25] shadow-2xl">
+      <video ref={remoteVideoRef} autoPlay playsInline className={`h-full w-full object-cover ${hasVideo ? "block" : "hidden"}`} />
+      {!hasVideo && (
+        <div className="flex h-full flex-col items-center justify-center bg-[radial-gradient(circle_at_center,#273242,#181b21_65%)]">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-indigo-500 text-2xl font-semibold">{participant.name.charAt(0).toUpperCase()}</div>
+          <p className="mt-3 text-xs text-slate-400">{connectionState === "connected" ? "Camera is off" : "Connecting…"}</p>
+        </div>
+      )}
+      <div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-lg bg-black/65 px-3 py-2 text-sm backdrop-blur">
+        {participant.media?.mic === false && <MdMicOff className="text-red-400" />} {participant.name}
+      </div>
+    </div>
   );
 }
 
