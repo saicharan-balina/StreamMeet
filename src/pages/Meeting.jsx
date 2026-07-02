@@ -290,6 +290,13 @@ export default function Meeting() {
             ) : (
               <>
                 <div className="flex-1 space-y-4 overflow-y-auto px-4 py-5">
+                  {messages.length === 0 && (
+                    <div className="flex h-full flex-col items-center justify-center text-center">
+                      <MdChat className="text-3xl text-slate-600" />
+                      <p className="mt-3 text-sm font-medium text-slate-300">No messages yet</p>
+                      <p className="mt-1 text-xs text-slate-500">Start the conversation with everyone here.</p>
+                    </div>
+                  )}
                   {messages.map((item) => {
                     const own = item.sender.toLowerCase() === displayName.toLowerCase();
                     if (item.role === "system") return <p key={item.id} className="text-center text-xs text-slate-500">{item.message}</p>;
