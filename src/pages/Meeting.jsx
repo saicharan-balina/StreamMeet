@@ -1,18 +1,20 @@
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  MdMic,
-  MdMicOff,
-  MdVideocam,
-  MdVideocamOff,
-  MdScreenShare,
-  MdStopScreenShare,
   MdCallEnd,
   MdChat,
-  MdSend,
+  MdClose,
+  MdContentCopy,
+  MdMic,
+  MdMicOff,
+  MdPeople,
   MdPerson,
+  MdScreenShare,
+  MdSend,
+  MdStopScreenShare,
+  MdVideocam,
+  MdVideocamOff,
 } from "react-icons/md";
 import { useNotification } from "../components/NotificationProvider";
-import Navbar from "../components/Navbar";
 import {
   fetchMeetingMessages,
   fetchMeetingRoom,
@@ -20,507 +22,318 @@ import {
   sendMeetingMessage,
 } from "../lib/meetingApi";
 
+const POLL_INTERVAL = 1500;
+
 export default function Meeting() {
   const { addNotification } = useNotification();
-  const query = new URLSearchParams(window.location.hash.split("?")[1] || "");
+  const query = useMemo(() => new URLSearchParams(window.location.hash.split("?")[1] || ""), []);
   const roomId = query.get("room") || "";
   const displayName = query.get("name") || "You";
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [callDuration, setCallDuration] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [room, setRoom] = useState(null);
-  const [isLoadingRoom, setIsLoadingRoom] = useState(true);
   const [roomError, setRoomError] = useState("");
   const [chatInput, setChatInput] = useState("");
-  const [chatMessages, setChatMessages] = useState([]);
+  const [messages, setMessages] = useState([]);
   const [chatError, setChatError] = useState("");
+  const [mediaError, setMediaError] = useState("");
+  const [activePanel, setActivePanel] = useState(null);
+  const [isSending, setIsSending] = useState(false);
   const videoRef = useRef(null);
+  const cameraStreamRef = useRef(null);
+  const screenStreamRef = useRef(null);
   const chatEndRef = useRef(null);
 
+  const participants = room?.participants ?? [];
+  const role = room?.hostName?.toLowerCase() === displayName.toLowerCase() ? "host" : "guest";
+
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCallDuration((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(timer);
+    const timer = window.setInterval(() => setDuration((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
+    let alive = true;
     if (!roomId) {
-      setRoomError("Missing room id in the meeting link.");
-      setIsLoadingRoom(false);
-      return;
-    }
-
-    let isMounted = true;
-
-    const loadRoom = async () => {
-      setIsLoadingRoom(true);
-      setRoomError("");
-
-      try {
-        const { room: fetchedRoom } = await fetchMeetingRoom(roomId);
-
-        if (isMounted) {
-          setRoom(fetchedRoom);
-        }
-      } catch (fetchError) {
-        if (isMounted) {
-          setRoomError(fetchError.message || "Unable to load the room.");
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoadingRoom(false);
-        }
-      }
-    };
-
-    loadRoom();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [roomId]);
-
-  useEffect(() => {
-    if (!roomId) {
+      setRoomError("This meeting link is missing a room ID.");
       return undefined;
     }
 
-    let isMounted = true;
-
-    const loadMessages = async () => {
+    const syncRoom = async () => {
       try {
-        const { messages } = await fetchMeetingMessages(roomId);
-
-        if (isMounted) {
-          setChatMessages(messages);
-          setChatError("");
+        const result = await fetchMeetingRoom(roomId);
+        if (alive) {
+          setRoom(result.room);
+          setRoomError("");
         }
-      } catch (fetchError) {
-        if (isMounted) {
-          setChatError(fetchError.message || "Unable to load chat messages.");
-        }
+      } catch (error) {
+        if (alive) setRoomError(error.message || "Could not connect to this meeting.");
       }
     };
 
-    loadMessages();
-    const intervalId = window.setInterval(loadMessages, 4000);
-
+    syncRoom();
+    const timer = window.setInterval(syncRoom, POLL_INTERVAL);
     return () => {
-      isMounted = false;
-      window.clearInterval(intervalId);
+      alive = false;
+      window.clearInterval(timer);
     };
   }, [roomId]);
 
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (!roomId || !displayName) {
+    let alive = true;
+    if (!roomId) return undefined;
+
+    const syncMessages = async () => {
+      try {
+        const result = await fetchMeetingMessages(roomId);
+        if (alive) {
+          setMessages(result.messages);
+          setChatError("");
+        }
+      } catch (error) {
+        if (alive) setChatError(error.message || "Chat is temporarily unavailable.");
+      }
+    };
+
+    syncMessages();
+    const timer = window.setInterval(syncMessages, POLL_INTERVAL);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [roomId]);
+
+  useEffect(() => {
+    let alive = true;
+    const startCamera = async () => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setMediaError("Camera access is not supported in this browser.");
+        setIsCameraOn(false);
+        setIsMicOn(false);
         return;
       }
-
-      const payload = JSON.stringify({ displayName });
-      navigator.sendBeacon?.(
-        `${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/rooms/${encodeURIComponent(roomId)}/leave`,
-        new Blob([payload], { type: "application/json" }),
-      );
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        if (!alive) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        cameraStreamRef.current = stream;
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      } catch {
+        setMediaError("Camera and microphone permission was not granted. You can still use meeting chat.");
+        setIsCameraOn(false);
+        setIsMicOn(false);
+      }
     };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
+    startCamera();
     return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
+      alive = false;
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [displayName, roomId]);
+  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
+  }, [messages, activePanel]);
 
-  const participants = room?.participants ?? [];
-  const activeParticipants = participants.filter(
-    (participant) => participant.role === "host" || participant.role === "guest",
-  );
+  useEffect(() => {
+    const leave = () => {
+      if (!roomId) return;
+      navigator.sendBeacon?.(
+        `${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/rooms/${encodeURIComponent(roomId)}/leave`,
+        new Blob([JSON.stringify({ displayName })], { type: "application/json" }),
+      );
+    };
+    window.addEventListener("beforeunload", leave);
+    return () => window.removeEventListener("beforeunload", leave);
+  }, [displayName, roomId]);
 
   const toggleMic = () => {
-    setIsMicOn(!isMicOn);
-    addNotification(
-      isMicOn ? "Microphone muted" : "Microphone unmuted",
-      "info",
-      2000
-    );
+    const next = !isMicOn;
+    cameraStreamRef.current?.getAudioTracks().forEach((track) => { track.enabled = next; });
+    setIsMicOn(next);
   };
 
   const toggleCamera = () => {
-    setIsCameraOn(!isCameraOn);
-    addNotification(
-      isCameraOn ? "Camera turned off" : "Camera turned on",
-      "info",
-      2000
-    );
+    const next = !isCameraOn;
+    cameraStreamRef.current?.getVideoTracks().forEach((track) => { track.enabled = next; });
+    setIsCameraOn(next);
   };
 
-  const toggleScreenShare = () => {
-    setIsScreenSharing(!isScreenSharing);
-    addNotification(
-      isScreenSharing ? "Screen sharing stopped" : "Screen sharing started",
-      "success",
-      2000
-    );
+  const toggleScreenShare = async () => {
+    if (isScreenSharing) {
+      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+      screenStreamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = cameraStreamRef.current;
+      setIsScreenSharing(false);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      screenStreamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      setIsScreenSharing(true);
+      stream.getVideoTracks()[0].addEventListener("ended", () => {
+        if (videoRef.current) videoRef.current.srcObject = cameraStreamRef.current;
+        screenStreamRef.current = null;
+        setIsScreenSharing(false);
+      }, { once: true });
+    } catch (error) {
+      if (error.name !== "NotAllowedError") addNotification("Screen sharing could not start", "error", 2500);
+    }
   };
 
-  const formatDuration = (seconds) => {
+  const sendMessage = async (event) => {
+    event.preventDefault();
+    const text = chatInput.trim();
+    if (!text || isSending) return;
+    setIsSending(true);
+    try {
+      const result = await sendMeetingMessage(roomId, displayName, text, role);
+      setMessages((current) => current.some((item) => item.id === result.message.id)
+        ? current : [...current, result.message]);
+      setChatInput("");
+      setChatError("");
+    } catch (error) {
+      setChatError(error.message || "Your message could not be sent.");
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const copyInvite = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href.replace(/&name=[^&]*/i, ""));
+      addNotification("Meeting link copied", "success", 2000);
+    } catch {
+      addNotification("Could not copy the meeting link", "error", 2000);
+    }
+  };
+
+  const endCall = async () => {
+    if (!window.confirm("Leave this meeting?")) return;
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+    try { await leaveMeetingRoom(roomId, displayName); } catch { /* room may already be closed */ }
+    window.location.hash = "#home";
+  };
+
+  const formatTime = (seconds) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-    }
-    return `${minutes}:${secs.toString().padStart(2, "0")}`;
+    return `${hours ? `${hours}:` : ""}${String(minutes).padStart(hours ? 2 : 1, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
-  const formatMessageTimestamp = (message) => {
-    if (message.sentAt) {
-      return message.sentAt;
-    }
-
-    if (!message.createdAt) {
-      return "Now";
-    }
-
-    return new Intl.DateTimeFormat("en", {
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(message.createdAt));
-  };
-
-  const endCall = () => {
-    if (confirm("Are you sure you want to end the call?")) {
-      leaveMeetingRoom(roomId, displayName)
-        .catch(() => {})
-        .finally(() => {
-          addNotification("Call ended", "info", 2000);
-          setTimeout(() => {
-            window.location.hash = "#";
-          }, 500);
-        });
-    }
-  };
-
-  const sendChatMessage = (event) => {
-    event.preventDefault();
-
-    if (!roomId || roomError) {
-      return;
-    }
-
-    const trimmedMessage = chatInput.trim();
-    if (!trimmedMessage) {
-      return;
-    }
-
-    sendMeetingMessage(roomId, displayName, trimmedMessage)
-      .then(({ message }) => {
-        setChatMessages((messages) => {
-          if (messages.some((existingMessage) => existingMessage.id === message.id)) {
-            return messages;
-          }
-
-          return [...messages, message];
-        });
-        setChatInput("");
-        setChatError("");
-      })
-      .catch((sendError) => {
-        setChatError(sendError.message || "Unable to send the message.");
-        addNotification("Message failed to send", "error", 2500);
-      });
-  };
+  const messageTime = (date) => new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(date));
 
   return (
-    <main className="flex min-h-screen flex-col bg-gradient-to-br from-sky-50 via-white to-emerald-50 text-slate-900 lg:h-screen lg:overflow-hidden">
-      <Navbar />
+    <main className="flex h-screen min-h-[620px] flex-col overflow-hidden bg-[#111318] text-white">
+      <header className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 px-4 sm:px-6">
+        <div className="min-w-0">
+          <h1 className="truncate text-sm font-semibold sm:text-base">{room?.title || "StreamMeet meeting"}</h1>
+          <p className="mt-0.5 truncate text-xs text-slate-400">{roomError || `${roomId} · ${formatTime(duration)}`}</p>
+        </div>
+        <button type="button" onClick={copyInvite} className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-white/10">
+          <MdContentCopy /> <span className="hidden sm:inline">Copy invite</span>
+        </button>
+      </header>
 
-      {/* Video Grid */}
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6 xl:flex-row xl:overflow-hidden">
-        {/* Main Video Area */}
-        <div className="flex min-h-[520px] flex-1 flex-col xl:min-h-0">
-          <div className="mb-4 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-700 shadow-sm backdrop-blur-sm">
-            {isLoadingRoom ? (
-              <span>Loading room {roomId}...</span>
-            ) : roomError ? (
-              <span className="text-red-600">{roomError}</span>
-            ) : (
-              <span>
-                {room?.title || "Meeting room"} | Room {room?.roomId} | Hosted by {room?.hostName}
-              </span>
-            )}
-          </div>
-
-          {/* Primary Video */}
-          <div className="flex-1 relative bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl overflow-hidden group shadow-lg border border-slate-200">
-            <div className="w-full h-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-              {isCameraOn ? (
-                <div ref={videoRef} className="w-full h-full bg-slate-100" />
-              ) : (
-                <div className="flex flex-col items-center gap-4">
-                  <div className="w-24 h-24 rounded-full bg-sky-100 flex items-center justify-center">
-                    <MdPerson className="text-4xl text-sky-600" />
-                  </div>
-                  <p className="text-lg text-slate-600 font-medium">Camera is off</p>
+      <div className="flex min-h-0 flex-1">
+        <section className="relative flex min-w-0 flex-1 items-center justify-center p-3 sm:p-5">
+          <div className="relative h-full w-full overflow-hidden rounded-2xl border border-white/10 bg-[#1b1e25] shadow-2xl">
+            <video ref={videoRef} autoPlay muted playsInline className={`h-full w-full object-cover ${isCameraOn || isScreenSharing ? "block" : "hidden"}`} />
+            {!isCameraOn && !isScreenSharing && (
+              <div className="flex h-full flex-col items-center justify-center bg-[radial-gradient(circle_at_center,#273242,#181b21_65%)]">
+                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-sky-500 text-3xl font-semibold shadow-xl">
+                  {displayName.trim().charAt(0).toUpperCase() || <MdPerson />}
                 </div>
-              )}
-            </div>
-
-            {/* Participant Name Overlay */}
-            <div className="absolute bottom-4 left-4 flex max-w-[calc(100%-2rem)] items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${isMicOn ? "bg-emerald-500" : "bg-red-500"}`} />
-              <span className="text-sm font-semibold bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-slate-900 border border-slate-200">
-                {displayName}
-              </span>
-            </div>
-
-            {/* Screen Share Indicator */}
-            {isScreenSharing && (
-              <div className="absolute top-4 right-4 bg-red-500 px-3 py-1 rounded-full text-xs font-semibold">
-                Sharing Screen
+                <p className="mt-4 text-sm font-medium text-slate-200">Camera is off</p>
+                {mediaError && <p className="mt-2 max-w-md px-6 text-center text-xs text-slate-400">{mediaError}</p>}
               </div>
             )}
-          </div>
-
-          {/* Participants Grid */}
-          {activeParticipants.length > 1 && (
-            <div className="mt-4 grid max-h-[220px] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
-              {activeParticipants.slice(1).map((participant) => (
-                <div
-                  key={participant.id}
-                  className="relative bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl overflow-hidden aspect-video group shadow-md border border-slate-200 hover:shadow-lg transition"
-                >
-                  <div className="w-full h-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-12 h-12 rounded-full bg-sky-100 flex items-center justify-center">
-                        <MdPerson className="text-xl text-sky-600" />
-                      </div>
-                      <span className="text-xs font-medium text-slate-700">
-                        {participant.name}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Status Indicator */}
-                  <div className="absolute top-2 right-2">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                  </div>
-                </div>
-              ))}
+            <div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-lg bg-black/65 px-3 py-2 text-sm backdrop-blur">
+              {!isMicOn && <MdMicOff className="text-red-400" />} {displayName} {role === "host" && <span className="text-xs text-slate-400">(Host)</span>}
             </div>
-          )}
-        </div>
-
-        <aside className="flex w-full flex-col gap-4 xl:w-[360px] xl:flex-shrink-0 xl:overflow-hidden">
-        {/* Sidebar - Participants List */}
-        <section className="flex max-h-[320px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/70 shadow-lg backdrop-blur-sm xl:max-h-[36%]">
-          <div className="p-4 border-b border-slate-200">
-            <h2 className="text-lg font-semibold text-slate-900">Participants ({activeParticipants.length || 1})</h2>
-          </div>
-
-          <div className="flex-1 overflow-y-auto">
-            {activeParticipants.length > 0 ? (
-              activeParticipants.map((participant) => (
-                <div
-                  key={participant.id}
-                  className="flex items-center gap-3 p-4 border-b border-slate-100 hover:bg-sky-50/50 transition"
-                >
-                  <div className="w-10 h-10 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0">
-                    <MdPerson className="text-sky-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 truncate">{participant.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {participant.role === "host" ? "Host" : "Guest"}
-                    </p>
-                  </div>
-                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                </div>
-              ))
-            ) : (
-              <div className="p-4 text-sm text-slate-500">No participants loaded yet.</div>
-            )}
-          </div>
-
-          {/* Participants Actions */}
-          <div className="p-4 border-t border-slate-200">
-            <button
-              type="button"
-              onClick={async () => {
-                await navigator.clipboard.writeText(window.location.href);
-                addNotification("Invite link copied", "success", 2000);
-              }}
-              className="w-full text-sm font-semibold text-sky-600 hover:text-sky-700 transition py-2 px-3 rounded-lg hover:bg-sky-50"
-            >
-              Share Invite Link
-            </button>
+            {isScreenSharing && <div className="absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold">You are presenting</div>}
           </div>
         </section>
 
-        {/* Meeting Chat */}
-        <section className="flex min-h-[420px] flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/80 shadow-lg backdrop-blur-sm xl:min-h-0">
-          <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                <MdChat className="text-xl" />
-              </span>
+        {activePanel && (
+          <aside className="absolute inset-y-16 right-0 z-30 flex w-full max-w-[380px] flex-col border-l border-white/10 bg-[#181b21] shadow-2xl sm:relative sm:inset-y-0 sm:z-auto sm:w-[360px]">
+            <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 px-5">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">Meeting Chat</h2>
-                <p className="text-xs text-slate-500">{chatMessages.length} messages</p>
+                <h2 className="font-semibold">{activePanel === "people" ? "Participants" : "In-call messages"}</h2>
+                <p className="text-xs text-slate-400">{activePanel === "people" ? `${participants.length} in the meeting` : "Visible to everyone here"}</p>
               </div>
+              <button type="button" aria-label="Close panel" onClick={() => setActivePanel(null)} className="rounded-full p-2 text-slate-400 hover:bg-white/10 hover:text-white"><MdClose className="text-xl" /></button>
             </div>
-            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-              Live
-            </span>
-          </div>
 
-          <div className="flex-1 space-y-3 overflow-y-auto p-4">
-            {chatMessages.map((chatMessage) => {
-              const isOwnMessage = chatMessage.sender === displayName;
-
-              return (
-                <div
-                  key={chatMessage.id}
-                  className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[86%] rounded-2xl px-3 py-2 shadow-sm ${
-                      isOwnMessage
-                        ? "bg-sky-600 text-white"
-                        : chatMessage.role === "system"
-                          ? "bg-emerald-50 text-emerald-900 border border-emerald-100"
-                          : "bg-slate-100 text-slate-900"
-                    }`}
-                  >
-                    <div className="mb-1 flex items-center justify-between gap-3">
-                      <span
-                        className={`text-xs font-semibold ${
-                          isOwnMessage ? "text-sky-50" : "text-slate-600"
-                        }`}
-                      >
-                        {chatMessage.sender}
-                      </span>
-                      <span
-                        className={`text-[11px] ${
-                          isOwnMessage ? "text-sky-100" : "text-slate-400"
-                        }`}
-                      >
-                        {formatMessageTimestamp(chatMessage)}
-                      </span>
-                    </div>
-                    <p className="text-sm leading-relaxed">{chatMessage.message}</p>
+            {activePanel === "people" ? (
+              <div className="flex-1 overflow-y-auto p-3">
+                {participants.map((participant) => (
+                  <div key={participant.id} className="flex items-center gap-3 rounded-xl p-3 hover:bg-white/5">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-600 font-semibold">{participant.name.charAt(0).toUpperCase()}</div>
+                    <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{participant.name}{participant.name.toLowerCase() === displayName.toLowerCase() ? " (You)" : ""}</p><p className="text-xs capitalize text-slate-400">{participant.role}</p></div>
+                    <span className="h-2 w-2 rounded-full bg-emerald-400" />
                   </div>
+                ))}
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 space-y-4 overflow-y-auto px-4 py-5">
+                  {messages.map((item) => {
+                    const own = item.sender.toLowerCase() === displayName.toLowerCase();
+                    if (item.role === "system") return <p key={item.id} className="text-center text-xs text-slate-500">{item.message}</p>;
+                    return (
+                      <div key={item.id} className={`flex ${own ? "justify-end" : "justify-start"}`}>
+                        <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 ${own ? "rounded-br-sm bg-sky-600" : "rounded-bl-sm bg-white/10"}`}>
+                          <div className="mb-1 flex items-center gap-2 text-[11px]"><span className="font-semibold">{own ? "You" : item.sender}</span><span className={own ? "text-sky-100" : "text-slate-500"}>{messageTime(item.createdAt)}</span></div>
+                          <p className="break-words text-sm leading-5">{item.message}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={chatEndRef} />
                 </div>
-              );
-            })}
-            <div ref={chatEndRef} />
-          </div>
-
-          {chatError && (
-            <div className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
-              {chatError}
-            </div>
-          )}
-
-          <form onSubmit={sendChatMessage} className="border-t border-slate-200 p-4">
-            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm focus-within:border-sky-300 focus-within:ring-2 focus-within:ring-sky-100">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(event) => setChatInput(event.target.value)}
-                placeholder="Message everyone"
-                disabled={!roomId || Boolean(roomError)}
-                className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-              />
-              <button
-                type="submit"
-                disabled={!chatInput.trim() || !roomId || Boolean(roomError)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-600 text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
-                title="Send message"
-              >
-                <MdSend className="text-lg" />
-              </button>
-            </div>
-          </form>
-        </section>
-        </aside>
+                {chatError && <p className="border-t border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">{chatError}</p>}
+                <form onSubmit={sendMessage} className="border-t border-white/10 p-4">
+                  <div className="flex items-end gap-2 rounded-xl bg-white/10 p-2 focus-within:ring-2 focus-within:ring-sky-500/60">
+                    <textarea rows="1" maxLength="500" value={chatInput} onChange={(event) => setChatInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendMessage(event); }} placeholder="Send a message" className="max-h-28 min-h-9 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500" />
+                    <button type="submit" disabled={!chatInput.trim() || isSending || Boolean(roomError)} className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-40"><MdSend /></button>
+                  </div>
+                </form>
+              </>
+            )}
+          </aside>
+        )}
       </div>
 
-      {/* Control Bar */}
-      <div className="bg-gradient-to-t from-white/80 via-white/60 to-transparent backdrop-blur-sm border-t border-slate-200 pt-6 pb-6">
-        <div className="flex items-center justify-center gap-4 px-4">
-          {/* Microphone Control */}
-          <button
-            onClick={toggleMic}
-            className={`flex items-center justify-center w-14 h-14 rounded-full transition-all shadow-md border-2 ${
-              isMicOn
-                ? "bg-white border-sky-300 hover:bg-sky-50 text-sky-600"
-                : "bg-red-50 border-red-300 text-red-600 hover:bg-red-100"
-            }`}
-            title={isMicOn ? "Mute" : "Unmute"}
-          >
-            {isMicOn ? (
-              <MdMic className="text-2xl" />
-            ) : (
-              <MdMicOff className="text-2xl" />
-            )}
-          </button>
-
-          {/* Camera Control */}
-          <button
-            onClick={toggleCamera}
-            className={`flex items-center justify-center w-14 h-14 rounded-full transition-all shadow-md border-2 ${
-              isCameraOn
-                ? "bg-white border-sky-300 hover:bg-sky-50 text-sky-600"
-                : "bg-red-50 border-red-300 text-red-600 hover:bg-red-100"
-            }`}
-            title={isCameraOn ? "Turn off camera" : "Turn on camera"}
-          >
-            {isCameraOn ? (
-              <MdVideocam className="text-2xl" />
-            ) : (
-              <MdVideocamOff className="text-2xl" />
-            )}
-          </button>
-
-          {/* Screen Share Control */}
-          <button
-            onClick={toggleScreenShare}
-            className={`flex items-center justify-center w-14 h-14 rounded-full transition-all shadow-md border-2 ${
-              isScreenSharing
-                ? "bg-emerald-50 border-emerald-300 text-emerald-600 hover:bg-emerald-100"
-                : "bg-white border-slate-300 hover:bg-slate-50 text-slate-600"
-            }`}
-            title={isScreenSharing ? "Stop sharing" : "Share screen"}
-          >
-            {isScreenSharing ? (
-              <MdStopScreenShare className="text-2xl" />
-            ) : (
-              <MdScreenShare className="text-2xl" />
-            )}
-          </button>
-
-          {/* End Call Button */}
-          <button
-            onClick={endCall}
-            className="flex items-center justify-center w-14 h-14 rounded-full bg-red-500 hover:bg-red-600 transition-all text-white shadow-md border-2 border-red-600 ml-4"
-            title="End call"
-          >
-            <MdCallEnd className="text-2xl" />
-          </button>
+      <footer className="relative flex h-20 shrink-0 items-center justify-center border-t border-white/10 bg-[#181b21] px-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <ControlButton label={isMicOn ? "Mute" : "Unmute"} active={isMicOn} danger={!isMicOn} onClick={toggleMic}>{isMicOn ? <MdMic /> : <MdMicOff />}</ControlButton>
+          <ControlButton label={isCameraOn ? "Stop video" : "Start video"} active={isCameraOn} danger={!isCameraOn} onClick={toggleCamera}>{isCameraOn ? <MdVideocam /> : <MdVideocamOff />}</ControlButton>
+          <ControlButton label={isScreenSharing ? "Stop sharing" : "Present"} active={isScreenSharing} onClick={toggleScreenShare}>{isScreenSharing ? <MdStopScreenShare /> : <MdScreenShare />}</ControlButton>
+          <ControlButton label="Participants" active={activePanel === "people"} onClick={() => setActivePanel((panel) => panel === "people" ? null : "people")} badge={participants.length}><MdPeople /></ControlButton>
+          <ControlButton label="Chat" active={activePanel === "chat"} onClick={() => setActivePanel((panel) => panel === "chat" ? null : "chat")} badge={messages.filter((item) => item.role !== "system").length || null}><MdChat /></ControlButton>
+          <button type="button" onClick={endCall} aria-label="Leave call" title="Leave call" className="ml-1 flex h-11 w-16 items-center justify-center rounded-full bg-red-600 text-xl hover:bg-red-500 sm:ml-3"><MdCallEnd /></button>
         </div>
-
-        {/* Call Duration */}
-        <div className="text-center mt-4 text-slate-600 text-sm font-medium">
-          Call Duration: {formatDuration(callDuration)}
-        </div>
-      </div>
+      </footer>
     </main>
+  );
+}
+
+function ControlButton({ children, label, active, danger = false, onClick, badge }) {
+  return (
+    <button type="button" onClick={onClick} aria-label={label} title={label} className="group relative flex flex-col items-center gap-1">
+      <span className={`relative flex h-11 w-11 items-center justify-center rounded-full text-xl transition sm:w-12 ${danger ? "bg-red-500/20 text-red-300 hover:bg-red-500/30" : active ? "bg-sky-600 text-white hover:bg-sky-500" : "bg-white/10 text-slate-200 hover:bg-white/15"}`}>
+        {children}{badge ? <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-emerald-500 px-1 text-center text-[10px] font-bold leading-4 text-white">{badge}</span> : null}
+      </span>
+      <span className="hidden text-[10px] text-slate-400 sm:block">{label}</span>
+    </button>
   );
 }
