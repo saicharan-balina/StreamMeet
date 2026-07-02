@@ -47,6 +47,13 @@ export async function fetchMeetingRoom(roomId) {
   return requestJson(`/api/rooms/${encodeURIComponent(roomId)}`);
 }
 
+export async function heartbeatMeetingRoom(roomId, clientId, media) {
+  return requestJson(`/api/rooms/${encodeURIComponent(roomId)}/heartbeat`, {
+    method: "POST",
+    body: JSON.stringify({ clientId, media }),
+  });
+}
+
 export async function fetchMeetingMessages(roomId) {
   return requestJson(`/api/rooms/${encodeURIComponent(roomId)}/messages`);
 }

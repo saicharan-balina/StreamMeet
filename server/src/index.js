@@ -8,6 +8,7 @@ import {
   getRoomMessages,
   joinRoom,
   leaveRoom,
+  touchParticipant,
 } from "./store.js";
 
 const app = express();
@@ -180,6 +181,17 @@ app.post("/api/rooms/:roomId/messages", (request, response, next) => {
 
     const message = addRoomMessage(request.params.roomId, chatMessage);
     return response.status(201).json({ message });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/api/rooms/:roomId/heartbeat", (request, response, next) => {
+  try {
+    const { clientId, media } = request.body ?? {};
+    if (!normalizeText(clientId)) return sendValidationError(response, "clientId is required");
+    const room = touchParticipant(request.params.roomId, clientId, media);
+    return response.json({ room });
   } catch (error) {
     return next(error);
   }

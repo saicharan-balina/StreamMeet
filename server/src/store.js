@@ -4,6 +4,7 @@ const rooms = new Map();
 const DEFAULT_MAX_PARTICIPANTS = 12;
 const VALID_ROOM_MODES = new Set(["quick", "private", "recurring"]);
 const WELCOME_MESSAGE = "Chat is ready for meeting notes, quick links, and questions.";
+const PARTICIPANT_TIMEOUT_MS = 30_000;
 
 function makeRoomId() {
   return `SM-${randomUUID().slice(0, 8).toUpperCase()}`;
@@ -58,6 +59,11 @@ function createChatMessage({ sender, role, message }) {
 }
 
 function buildPublicRoom(room) {
+  const cutoff = Date.now() - PARTICIPANT_TIMEOUT_MS;
+  room.participants = room.participants.filter((participant) => {
+    const seenAt = participant.lastSeenAt || participant.joinedAt;
+    return new Date(seenAt).getTime() >= cutoff;
+  });
   return {
     roomId: room.roomId,
     title: room.title,
@@ -101,6 +107,8 @@ export function createRoom({ title, hostName, date, time, mode, maxParticipants,
         name: normalizeName(hostName),
         role: "host",
         joinedAt: createdAt,
+        lastSeenAt: createdAt,
+        media: { mic: true, camera: true, screen: false },
       },
     ],
     chatMessages: [createSystemMessage(WELCOME_MESSAGE)],
@@ -156,6 +164,7 @@ export function joinRoom(roomId, displayName, clientId) {
     role: "guest",
     joinedAt,
     lastSeenAt: joinedAt,
+    media: { mic: true, camera: true, screen: false },
   });
   room.chatMessages.push(createSystemMessage(`${participantName} joined the meeting.`));
   room.updatedAt = joinedAt;
@@ -206,6 +215,27 @@ export function getRoom(roomId) {
 
 export function getRoomCount() {
   return rooms.size;
+}
+
+export function touchParticipant(roomId, clientId, media = {}) {
+  const room = rooms.get(normalizeRoomId(roomId));
+  if (!room) throw createNotFoundError();
+
+  const participant = room.participants.find((item) => item.clientId === normalizeText(clientId));
+  if (!participant) {
+    const error = new Error("Participant not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  participant.lastSeenAt = new Date().toISOString();
+  participant.media = {
+    mic: media.mic !== false,
+    camera: media.camera !== false,
+    screen: media.screen === true,
+  };
+  room.updatedAt = participant.lastSeenAt;
+  return buildPublicRoom(room);
 }
 
 export function getRoomMessages(roomId) {
