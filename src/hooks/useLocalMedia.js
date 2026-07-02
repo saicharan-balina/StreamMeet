@@ -18,18 +18,30 @@ export function useLocalMedia() {
         return;
       }
 
-      try {
-        const nextStream = await navigator.mediaDevices.getUserMedia({
+      const [audioResult, videoResult] = await Promise.allSettled([
+        navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        }),
+        navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
-        });
-        if (!active) return nextStream.getTracks().forEach((track) => track.stop());
+        }),
+      ]);
+      const tracks = [
+        ...(audioResult.status === "fulfilled" ? audioResult.value.getAudioTracks() : []),
+        ...(videoResult.status === "fulfilled" ? videoResult.value.getVideoTracks() : []),
+      ];
+      if (!active) return tracks.forEach((track) => track.stop());
+      if (tracks.length) {
+        const nextStream = new MediaStream(tracks);
         streamRef.current = nextStream;
         setStream(nextStream);
-      } catch {
-        setError("Camera or microphone permission was denied. Check your browser permissions and try again.");
-        setMicOn(false);
-        setCameraOn(false);
+      }
+      if (audioResult.status === "rejected") setMicOn(false);
+      if (videoResult.status === "rejected") setCameraOn(false);
+      if (audioResult.status === "rejected" || videoResult.status === "rejected") {
+        setError(tracks.length
+          ? "Some media is unavailable. Check the blocked device in your browser permissions."
+          : "Camera and microphone permission was denied. Check your browser permissions and try again.");
       }
     }
 
@@ -42,12 +54,14 @@ export function useLocalMedia() {
   }, []);
 
   const toggleMic = useCallback(() => {
+    if (!streamRef.current?.getAudioTracks().length) return;
     const next = !micOn;
     streamRef.current?.getAudioTracks().forEach((track) => { track.enabled = next; });
     setMicOn(next);
   }, [micOn]);
 
   const toggleCamera = useCallback(() => {
+    if (!streamRef.current?.getVideoTracks().length) return;
     const next = !cameraOn;
     streamRef.current?.getVideoTracks().forEach((track) => { track.enabled = next; });
     setCameraOn(next);

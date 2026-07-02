@@ -4,7 +4,8 @@ import Footer from "../components/Footer";
 import { joinMeetingRoom } from "../lib/meetingApi";
 
 export default function JoinMeeting() {
-  const [roomId, setRoomId] = useState("");
+  const initialRoomId = new URLSearchParams(window.location.hash.split("?")[1] || "").get("room") || "";
+  const [roomId, setRoomId] = useState(initialRoomId);
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
   const [isJoining, setIsJoining] = useState(false);

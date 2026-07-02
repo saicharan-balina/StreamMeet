@@ -213,7 +213,8 @@ export default function Meeting() {
 
   const copyInvite = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href.replace(/&name=[^&]*/i, ""));
+      const invite = `${window.location.origin}${window.location.pathname}#join?room=${encodeURIComponent(roomId)}`;
+      await navigator.clipboard.writeText(invite);
       addNotification("Meeting link copied", "success", 2000);
     } catch {
       addNotification("Could not copy the meeting link", "error", 2000);
