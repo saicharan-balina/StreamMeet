@@ -138,5 +138,14 @@ export function usePeerMesh({ roomId, clientId, participantIds, localStream }) {
     peersRef.current.clear();
   }, []);
 
-  return { peersRef, remoteStreams, connectionStates };
+  const replaceOutgoingVideo = useCallback(async (track) => {
+    const replacements = [];
+    peersRef.current.forEach((peer) => {
+      const sender = peer.getSenders().find((item) => item.track?.kind === "video");
+      if (sender) replacements.push(sender.replaceTrack(track));
+    });
+    await Promise.all(replacements);
+  }, []);
+
+  return { peersRef, remoteStreams, connectionStates, replaceOutgoingVideo };
 }

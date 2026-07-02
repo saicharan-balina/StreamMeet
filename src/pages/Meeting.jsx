@@ -50,7 +50,7 @@ export default function Meeting() {
   const role = room?.hostName?.toLowerCase() === displayName.toLowerCase() ? "host" : "guest";
   const localMedia = useLocalMedia();
   const participantIds = useMemo(() => participants.map((participant) => participant.clientId), [participants]);
-  const { remoteStreams, connectionStates } = usePeerMesh({
+  const { remoteStreams, connectionStates, replaceOutgoingVideo } = usePeerMesh({
     roomId,
     clientId,
     participantIds,
@@ -164,6 +164,7 @@ export default function Meeting() {
     if (isScreenSharing) {
       screenStreamRef.current?.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
+      await replaceOutgoingVideo(localMedia.stream?.getVideoTracks()[0] || null);
       if (videoRef.current) videoRef.current.srcObject = localMedia.stream;
       setIsScreenSharing(false);
       return;
@@ -173,11 +174,16 @@ export default function Meeting() {
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 30, max: 30 } },
+        audio: false,
+      });
       screenStreamRef.current = stream;
+      await replaceOutgoingVideo(stream.getVideoTracks()[0]);
       if (videoRef.current) videoRef.current.srcObject = stream;
       setIsScreenSharing(true);
-      stream.getVideoTracks()[0].addEventListener("ended", () => {
+      stream.getVideoTracks()[0].addEventListener("ended", async () => {
+        await replaceOutgoingVideo(localMedia.stream?.getVideoTracks()[0] || null);
         if (videoRef.current) videoRef.current.srcObject = localMedia.stream;
         screenStreamRef.current = null;
         setIsScreenSharing(false);
@@ -355,7 +361,8 @@ function RemoteVideoTile({ participant, stream, connectionState }) {
   const hasVideo = Boolean(stream?.getVideoTracks().some((track) => track.readyState === "live")) && participant.media?.camera !== false;
   return (
     <div className="relative min-h-[260px] overflow-hidden rounded-2xl border border-white/10 bg-[#1b1e25] shadow-2xl">
-      <video ref={remoteVideoRef} autoPlay playsInline className={`h-full w-full object-cover ${hasVideo ? "block" : "hidden"}`} />
+      <video ref={remoteVideoRef} autoPlay playsInline className={`h-full w-full ${participant.media?.screen ? "object-contain bg-black" : "object-cover"} ${hasVideo ? "block" : "hidden"}`} />
+      {participant.media?.screen && <div className="absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold">Presenting</div>}
       {!hasVideo && (
         <div className="flex h-full flex-col items-center justify-center bg-[radial-gradient(circle_at_center,#273242,#181b21_65%)]">
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-indigo-500 text-2xl font-semibold">{participant.name.charAt(0).toUpperCase()}</div>
