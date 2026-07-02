@@ -172,6 +172,10 @@ export default function Meeting() {
       setIsScreenSharing(false);
       return;
     }
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      addNotification("Screen sharing is not supported in this browser", "error", 2500);
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       screenStreamRef.current = stream;
