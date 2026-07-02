@@ -112,6 +112,7 @@ export function createRoom({ title, hostName, date, time, mode, maxParticipants,
       },
     ],
     chatMessages: [createSystemMessage(WELCOME_MESSAGE)],
+    signals: [],
   };
 
   rooms.set(roomId, room);
@@ -281,4 +282,38 @@ export function addRoomMessage(roomId, { sender, message, role }) {
   room.updatedAt = nextMessage.createdAt;
 
   return buildPublicMessage(nextMessage);
+}
+
+export function queueSignal(roomId, { senderId, recipientId, type, payload }) {
+  const room = rooms.get(normalizeRoomId(roomId));
+  if (!room) throw createNotFoundError();
+
+  const sender = room.participants.find((item) => item.clientId === normalizeText(senderId));
+  const recipient = room.participants.find((item) => item.clientId === normalizeText(recipientId));
+  if (!sender || !recipient) {
+    const error = new Error("Signal participants must be in the room");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const signal = {
+    id: randomUUID(),
+    senderId: sender.clientId,
+    recipientId: recipient.clientId,
+    type,
+    payload,
+    createdAt: new Date().toISOString(),
+  };
+  room.signals.push(signal);
+  return { ...signal };
+}
+
+export function takeSignals(roomId, recipientId) {
+  const room = rooms.get(normalizeRoomId(roomId));
+  if (!room) throw createNotFoundError();
+
+  const normalizedRecipientId = normalizeText(recipientId);
+  const signals = room.signals.filter((signal) => signal.recipientId === normalizedRecipientId);
+  room.signals = room.signals.filter((signal) => signal.recipientId !== normalizedRecipientId);
+  return signals.map((signal) => ({ ...signal }));
 }
