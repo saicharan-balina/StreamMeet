@@ -99,9 +99,14 @@ export default function Meeting() {
 
     syncMessages();
     const timer = window.setInterval(syncMessages, POLL_INTERVAL);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") syncMessages();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       alive = false;
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [roomId]);
 
