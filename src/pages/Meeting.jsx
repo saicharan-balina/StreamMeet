@@ -279,6 +279,9 @@ export default function Meeting() {
 
             {activePanel === "people" ? (
               <div className="flex-1 overflow-y-auto p-3">
+                {participants.length === 0 && (
+                  <p className="px-3 py-8 text-center text-sm text-slate-400">Waiting for participant details…</p>
+                )}
                 {participants.map((participant) => (
                   <div key={participant.id} className="flex items-center gap-3 rounded-xl p-3 hover:bg-white/5">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-600 font-semibold">{participant.name.charAt(0).toUpperCase()}</div>
