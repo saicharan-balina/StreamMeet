@@ -329,7 +329,7 @@ export default function Meeting() {
 
 function ControlButton({ children, label, active, danger = false, onClick, badge }) {
   return (
-    <button type="button" onClick={onClick} aria-label={label} title={label} className="group relative flex flex-col items-center gap-1">
+    <button type="button" onClick={onClick} aria-label={label} aria-pressed={active} title={label} className="group relative flex flex-col items-center gap-1">
       <span className={`relative flex h-11 w-11 items-center justify-center rounded-full text-xl transition sm:w-12 ${danger ? "bg-red-500/20 text-red-300 hover:bg-red-500/30" : active ? "bg-sky-600 text-white hover:bg-sky-500" : "bg-white/10 text-slate-200 hover:bg-white/15"}`}>
         {children}{badge ? <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-emerald-500 px-1 text-center text-[10px] font-bold leading-4 text-white">{badge}</span> : null}
       </span>
