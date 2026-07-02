@@ -54,6 +54,17 @@ export async function heartbeatMeetingRoom(roomId, clientId, media) {
   });
 }
 
+export async function fetchMeetingSignals(roomId, recipientId) {
+  return requestJson(`/api/rooms/${encodeURIComponent(roomId)}/signals?recipientId=${encodeURIComponent(recipientId)}`);
+}
+
+export async function sendMeetingSignal(roomId, senderId, recipientId, type, payload) {
+  return requestJson(`/api/rooms/${encodeURIComponent(roomId)}/signals`, {
+    method: "POST",
+    body: JSON.stringify({ senderId, recipientId, type, payload }),
+  });
+}
+
 export async function fetchMeetingMessages(roomId) {
   return requestJson(`/api/rooms/${encodeURIComponent(roomId)}/messages`);
 }

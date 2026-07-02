@@ -9,6 +9,8 @@ import {
   joinRoom,
   leaveRoom,
   touchParticipant,
+  queueSignal,
+  takeSignals,
 } from "./store.js";
 
 const app = express();
@@ -16,6 +18,7 @@ const port = Number(process.env.PORT || 3001);
 const allowedOrigin = process.env.FRONTEND_ORIGIN || "*";
 const validModes = new Set(["quick", "private", "recurring"]);
 const validMessageRoles = new Set(["guest", "host", "system"]);
+const validSignalTypes = new Set(["offer", "answer", "candidate"]);
 
 app.use(cors({ origin: allowedOrigin }));
 app.use(express.json({ limit: "32kb" }));
@@ -192,6 +195,32 @@ app.post("/api/rooms/:roomId/heartbeat", (request, response, next) => {
     if (!normalizeText(clientId)) return sendValidationError(response, "clientId is required");
     const room = touchParticipant(request.params.roomId, clientId, media);
     return response.json({ room });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/api/rooms/:roomId/signals", (request, response, next) => {
+  try {
+    const recipientId = normalizeText(request.query.recipientId);
+    if (!recipientId) return sendValidationError(response, "recipientId is required");
+    return response.json({ signals: takeSignals(request.params.roomId, recipientId) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/api/rooms/:roomId/signals", (request, response, next) => {
+  try {
+    const { senderId, recipientId, type, payload } = request.body ?? {};
+    if (!normalizeText(senderId) || !normalizeText(recipientId)) {
+      return sendValidationError(response, "senderId and recipientId are required");
+    }
+    if (!validSignalTypes.has(type) || !payload || typeof payload !== "object") {
+      return sendValidationError(response, "A valid signal type and payload are required");
+    }
+    const signal = queueSignal(request.params.roomId, { senderId, recipientId, type, payload });
+    return response.status(201).json({ signal });
   } catch (error) {
     return next(error);
   }
