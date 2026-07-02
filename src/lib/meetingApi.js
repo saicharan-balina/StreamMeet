@@ -29,17 +29,17 @@ export async function createMeetingRoom(data) {
   });
 }
 
-export async function joinMeetingRoom(roomId, displayName) {
+export async function joinMeetingRoom(roomId, displayName, clientId) {
   return requestJson(`/api/rooms/${encodeURIComponent(roomId)}/join`, {
     method: "POST",
-    body: JSON.stringify({ displayName }),
+    body: JSON.stringify({ displayName, clientId }),
   });
 }
 
-export async function leaveMeetingRoom(roomId, displayName) {
+export async function leaveMeetingRoom(roomId, displayName, clientId) {
   return requestJson(`/api/rooms/${encodeURIComponent(roomId)}/leave`, {
     method: "POST",
-    body: JSON.stringify({ displayName }),
+    body: JSON.stringify({ displayName, clientId }),
   });
 }
 

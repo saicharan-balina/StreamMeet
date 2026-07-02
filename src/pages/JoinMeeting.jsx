@@ -45,8 +45,9 @@ export default function JoinMeeting() {
     setError("");
 
     try {
-      const { room } = await joinMeetingRoom(normalizedRoomId, displayName);
-      window.location.hash = `#meeting?room=${encodeURIComponent(room.roomId)}&name=${encodeURIComponent(displayName.trim())}`;
+      const clientId = crypto.randomUUID();
+      const { room } = await joinMeetingRoom(normalizedRoomId, displayName, clientId);
+      window.location.hash = `#meeting?room=${encodeURIComponent(room.roomId)}&name=${encodeURIComponent(displayName.trim())}&client=${encodeURIComponent(clientId)}`;
       return room;
     } catch (joinError) {
       setError(joinError.message || "Unable to join the room.");

@@ -83,12 +83,12 @@ app.get("/api/health", (_request, response) => {
 
 app.post("/api/rooms", (request, response, next) => {
   try {
-    const { title, hostName, date, time, mode } = request.body ?? {};
+    const { title, hostName, date, time, mode, clientId } = request.body ?? {};
     const normalizedTitle = normalizeText(title);
     const normalizedHostName = normalizeText(hostName);
 
-    if (!normalizedTitle || !normalizedHostName || !date || !time) {
-      return sendValidationError(response, "title, hostName, date, and time are required");
+    if (!normalizedTitle || !normalizedHostName || !date || !time || !normalizeText(clientId)) {
+      return sendValidationError(response, "title, hostName, date, time, and clientId are required");
     }
 
     if (normalizedTitle.length > 120) {
@@ -117,6 +117,7 @@ app.post("/api/rooms", (request, response, next) => {
       date,
       time,
       mode: mode || "quick",
+      clientId,
     });
 
     return response.status(201).json({ room });
@@ -147,7 +148,7 @@ app.get("/api/rooms/:roomId/messages", (request, response) => {
 
 app.post("/api/rooms/:roomId/join", (request, response, next) => {
   try {
-    const { displayName } = request.body ?? {};
+    const { displayName, clientId } = request.body ?? {};
     const normalizedDisplayName = normalizeText(displayName);
 
     if (!normalizedDisplayName) {
@@ -158,7 +159,11 @@ app.post("/api/rooms/:roomId/join", (request, response, next) => {
       return sendValidationError(response, "displayName must be 60 characters or fewer");
     }
 
-    const room = joinRoom(request.params.roomId, normalizedDisplayName);
+    if (!normalizeText(clientId)) {
+      return sendValidationError(response, "clientId is required");
+    }
+
+    const room = joinRoom(request.params.roomId, normalizedDisplayName, clientId);
     return response.json({ room });
   } catch (error) {
     return next(error);
@@ -182,14 +187,14 @@ app.post("/api/rooms/:roomId/messages", (request, response, next) => {
 
 app.post("/api/rooms/:roomId/leave", (request, response, next) => {
   try {
-    const { displayName } = request.body ?? {};
+    const { displayName, clientId } = request.body ?? {};
     const normalizedDisplayName = normalizeText(displayName);
 
     if (!normalizedDisplayName) {
       return sendValidationError(response, "displayName is required");
     }
 
-    const room = leaveRoom(request.params.roomId, normalizedDisplayName);
+    const room = leaveRoom(request.params.roomId, normalizedDisplayName, clientId);
 
     if (!room) {
       return response.status(204).end();

@@ -79,7 +79,7 @@ function createNotFoundError() {
   return error;
 }
 
-export function createRoom({ title, hostName, date, time, mode, maxParticipants }) {
+export function createRoom({ title, hostName, date, time, mode, maxParticipants, clientId }) {
   const roomId = makeRoomId();
   const createdAt = new Date().toISOString();
   const room = {
@@ -97,6 +97,7 @@ export function createRoom({ title, hostName, date, time, mode, maxParticipants 
     participants: [
       {
         id: randomUUID(),
+        clientId: normalizeText(clientId),
         name: normalizeName(hostName),
         role: "host",
         joinedAt: createdAt,
@@ -109,7 +110,7 @@ export function createRoom({ title, hostName, date, time, mode, maxParticipants 
   return buildPublicRoom(room);
 }
 
-export function joinRoom(roomId, displayName) {
+export function joinRoom(roomId, displayName, clientId) {
   const normalizedRoomId = normalizeRoomId(roomId);
   const room = rooms.get(normalizedRoomId);
 
@@ -124,8 +125,15 @@ export function joinRoom(roomId, displayName) {
     throw error;
   }
 
+  const normalizedClientId = normalizeText(clientId);
+  if (!normalizedClientId) {
+    const error = new Error("clientId is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
   const existingParticipant = room.participants.find(
-    (participant) => participant.name.toLowerCase() === participantName.toLowerCase(),
+    (participant) => participant.clientId === normalizedClientId,
   );
 
   if (existingParticipant) {
@@ -143,6 +151,7 @@ export function joinRoom(roomId, displayName) {
   const joinedAt = new Date().toISOString();
   room.participants.push({
     id: randomUUID(),
+    clientId: normalizedClientId,
     name: participantName,
     role: "guest",
     joinedAt,
@@ -154,7 +163,7 @@ export function joinRoom(roomId, displayName) {
   return buildPublicRoom(room);
 }
 
-export function leaveRoom(roomId, displayName) {
+export function leaveRoom(roomId, displayName, clientId) {
   const normalizedRoomId = normalizeRoomId(roomId);
   const room = rooms.get(normalizedRoomId);
 
@@ -163,8 +172,11 @@ export function leaveRoom(roomId, displayName) {
   }
 
   const participantName = normalizeName(displayName).toLowerCase();
+  const normalizedClientId = normalizeText(clientId);
   const nextParticipants = room.participants.filter(
-    (participant) => participant.name.toLowerCase() !== participantName,
+    (participant) => normalizedClientId
+      ? participant.clientId !== normalizedClientId
+      : participant.name.toLowerCase() !== participantName,
   );
 
   room.participants = nextParticipants;

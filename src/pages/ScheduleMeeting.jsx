@@ -50,16 +50,18 @@ export default function ScheduleMeeting() {
     setError("");
 
     try {
+      const clientId = crypto.randomUUID();
       const { room } = await createMeetingRoom({
         title: meetingTitle,
         hostName,
         date,
         time,
         mode,
+        clientId,
       });
 
       setRoomPreview(room.roomId);
-      window.location.hash = `#meeting?room=${encodeURIComponent(room.roomId)}&name=${encodeURIComponent(hostName.trim())}`;
+      window.location.hash = `#meeting?room=${encodeURIComponent(room.roomId)}&name=${encodeURIComponent(hostName.trim())}&client=${encodeURIComponent(clientId)}`;
     } catch (scheduleError) {
       setError(scheduleError.message || "Unable to create the meeting room.");
     } finally {
