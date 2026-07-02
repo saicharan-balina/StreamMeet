@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "start": "vite",
     "backend:dev": "npm --prefix server run dev",
-    "backend:start": "npm --prefix server run start"
+    "backend:start": "npm --prefix server run start",
+    "test": "npm --prefix server test"
   },
   "dependencies": {
     "react": "^18.3.1",
